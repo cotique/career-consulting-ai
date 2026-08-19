@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # Same image as the local dev stand (docker-compose.yml) so integration
+    # tests (src/db/*.spec.ts) run against the same Postgres+pgvector in CI
+    # as locally. Mapped to 5433 to match .env.example's connection strings.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: jobsearch
+          POSTGRES_PASSWORD: localdev
+          POSTGRES_DB: job_search_ai
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U jobsearch -d job_search_ai"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+
+      # Blob storage, from the same docker-compose definition the local stand
+      # uses rather than a second one written out here. It cannot be a `services:`
+      # entry above: Azurite needs `--skipApiVersionCheck` (the SDK negotiates a
+      # newer service API than this image knows, and it rejects rather than
+      # degrades), and GitHub's service containers offer no way to override a
+      # command. Duplicating the flag here would be a copy that drifts — T15
+      # shipped with no Azurite in CI at all, so the blob tests were not run
+      # against anything until this was noticed from a red build.
+      - run: docker compose up -d azurite
+      - name: Wait for Azurite
+        run: |
+          for i in $(seq 1 30); do
+            curl -s -o /dev/null http://127.0.0.1:10000 && exit 0
+            sleep 1
+          done
+          echo "Azurite did not start listening on 10000"
+          docker compose logs azurite
+          exit 1
+
+      # .env.example's values point exactly at the service container above
+      # (localhost:5433, jobsearch/localdev) and at Azurite's well-known local
+      # account — no CI-specific secrets needed.
+      - run: cp .env.example .env
+      - run: npm run db:migrate
+      - run: npm test
+
+# Deploy job intentionally not added yet — see docs/TRADEOFFS.md
+# ("no deploy to Azure until Epic 3 is done"). Add a deploy job here,
+# manually triggered (workflow_dispatch), once auth (T12) and the
+# cost-guard (T11) land.

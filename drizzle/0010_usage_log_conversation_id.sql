@@ -1,0 +1,2 @@
+ALTER TABLE "llm_usage_logs" ADD COLUMN "conversation_id" text;--> statement-breakpoint
+CREATE INDEX "llm_usage_logs_conversation_id_idx" ON "llm_usage_logs" USING btree ("conversation_id") WHERE "llm_usage_logs"."conversation_id" IS NOT NULL;

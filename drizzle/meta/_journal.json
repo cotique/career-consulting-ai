@@ -1,0 +1,97 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1786167640324,
+      "tag": "0000_chubby_skaar",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786167685815,
+      "tag": "0001_row_level_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786171645668,
+      "tag": "0002_app_runtime_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786172663877,
+      "tag": "0003_rls_null_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786282937872,
+      "tag": "0004_drop_temporal_workflow_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786283842206,
+      "tag": "0005_denormalize_user_id_and_hooks",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786283873591,
+      "tag": "0006_rls_direct_user_id_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786305088582,
+      "tag": "0007_onboarding_i18n_and_identity_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786305202784,
+      "tag": "0008_auth_bootstrap_function",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786308410734,
+      "tag": "0009_usage_log_prompt_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786309900029,
+      "tag": "0010_usage_log_conversation_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786340849073,
+      "tag": "0011_usage_log_attempt",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786391434023,
+      "tag": "0012_extraction_prompt_version",
+      "breakpoints": true
+    }
+  ]
+}

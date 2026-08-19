@@ -1,0 +1,96 @@
+{
+  "$comment": "Vendored from claude-discipline-pack (see .claude/discipline-manifest.json) and configured by .claude/discipline.json. The pack is meant to be sufficient on its own: branch policy, definition-of-done, format feedback, KB-first and the operational envelope all come from it. Update with: node ../claude-discipline-pack/bin/discipline.mjs apply --target . Windows-first (PowerShell set); the pack also ships bash twins.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/block-protected-branch.ps1",
+            "timeout": 15,
+            "statusMessage": "Checking branch policy"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/secret-guard.ps1",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/format-postcheck.ps1",
+            "timeout": 60,
+            "statusMessage": "Linting the edited file"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/kb-first-reminder.ps1",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/secret-guard.ps1",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/dod-gate.ps1",
+            "timeout": 300,
+            "statusMessage": "Definition-of-done checks"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/session-envelope.ps1",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/session-envelope.ps1",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

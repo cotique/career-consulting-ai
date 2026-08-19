@@ -1,0 +1,1 @@
+ALTER TABLE "applications" DROP COLUMN "temporal_workflow_id";

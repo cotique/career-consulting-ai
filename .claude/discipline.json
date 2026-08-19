@@ -1,0 +1,45 @@
+{
+  "$comment": "Config for the vendored claude-discipline-pack hooks. Update the pack, then run: node ../claude-discipline-pack/bin/discipline.mjs apply --target . (and `check` in CI).",
+
+  "$commentMode": "enforce: the gates block. This repo previously enforced its branch rule with a hand-written hook, so shadow would have been a downgrade in protection — and the event log counts intercepts either way, which is the number shadow would have produced. Shadow is for gates you do not yet trust.",
+  "mode": "enforce",
+
+  "events": { "enabled": true, "path": ".claude/discipline-events.jsonl" },
+
+  "protectedBranches": ["main", "master"],
+
+  "kb": {
+    "toolName": "mempalace",
+    "projectTerms": ["scoring", "tailoring", "tracker", "intake", "digest", "collector", "pg-boss"]
+  },
+
+  "envelope": {
+    "repos": ["."],
+    "notes": [
+      "epic branch -> develop -> main by merge only; never commit on main",
+      "no commit without the user reviewing the diff first"
+    ]
+  },
+
+  "dod": {
+    "fileGlobs": ["*.ts"],
+
+    "$commentPreconditions": "What the checks need in order to mean anything. Most of this suite talks to a real Postgres and a real Azurite, so with the daemon stopped every integration test fails with a connection error and the gate reported that as 'definition-of-done checks failed' — blaming the diff for a stopped daemon. Checked first, reported separately, and it still blocks: unverified is unverified, but the message now says what to start rather than what to fix.",
+    "preconditions": [
+      {
+        "name": "docker daemon",
+        "command": "docker info",
+        "remedy": "Start Docker Desktop, then `docker compose up -d` — the integration tests need Postgres and Azurite."
+      }
+    ],
+
+    "checks": [
+      { "name": "typecheck", "command": "npx tsc --noEmit" },
+      { "name": "tests", "command": "npx vitest run" }
+    ]
+  },
+
+  "format": {
+    "*.ts": "npx eslint \"{file}\""
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    // node16 (not plain commonjs) so a real `await import(...)` survives
+    // compilation instead of being downleveled to require(): several current
+    // libraries (jose, openid-client) ship ESM-only, and require() of an ESM
+    // module throws at runtime. Emitted output is still CommonJS.
+    "module": "node16",
+    "moduleResolution": "node16",
+    "lib": ["ES2022"],
+    "declaration": false,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "tests"]
+}

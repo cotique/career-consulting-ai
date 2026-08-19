@@ -1,0 +1,32 @@
+# The Dockerfile does `COPY . .` into the build stage, so anything not excluded
+# here ends up in a build layer. Two reasons that matters: secrets, and weight.
+#
+# The runtime stage only copies `dist`, so the final image was never going to
+# ship a .env — but a build layer holding real credentials is still a layer that
+# exists, gets cached, and can be pushed by a differently-configured build.
+
+# Real secrets. .env.example is intentionally NOT excluded — it is the template.
+.env
+.env.*
+!.env.example
+
+# Reinstalled inside the image for the right platform; copying the host's copy
+# is both wasteful and wrong (native modules are built for the host).
+node_modules
+dist
+
+# History and tooling: large, and nothing in the build reads them.
+.git
+.github
+.claude
+.agents
+
+# Docs and local scratch — not part of the build.
+docs
+coverage
+*.log
+
+# Deliberately NOT excluding *.md: prompt prose lives in
+# src/llm/templates/text/*.md and is a build asset the app refuses to start
+# without. Docker's `*.md` would not match a nested path today, but relying on
+# that subtlety to keep the prompts is not worth the few kilobytes it saves.

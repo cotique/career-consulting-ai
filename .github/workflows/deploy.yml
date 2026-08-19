@@ -1,0 +1,174 @@
+name: Deploy to Azure Container Apps
+
+# Manual only, deliberately (ARCHITECTURE.md): a deploy is an action someone
+# takes, not a side effect of merging. `main` is not a deploy trigger.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag or SHA to deploy'
+        required: false
+        default: 'develop'
+      # An override rather than no gate and rather than an unbypassable one.
+      # A block with no escape hatch gets deleted the first time someone needs
+      # to ship with a known-broken unrelated test, and then nothing is enforced
+      # at all — the same way a guard with false positives gets switched off.
+      # Off by default, named for what it does, and it prints a warning into the
+      # run, so using it is a decision on the record rather than an accident.
+      deploy_without_ci:
+        description: 'Deploy even though CI is not green (emergencies only)'
+        type: boolean
+        required: false
+        default: false
+
+# Federated credentials (OIDC) instead of a stored ACR password or service
+# principal secret — the TRADEOFFS entry whose revisit trigger was "before
+# treating this as a durable CI setup". `id-token: write` is what lets the job
+# request the OIDC token Azure trusts.
+permissions:
+  id-token: write
+  contents: read
+  # Reading CI's verdict for the commit being deployed. Without this the gate
+  # below cannot see the run and would have to assume the best, which is the
+  # behaviour it exists to remove.
+  actions: read
+
+# Resource names come from repository variables, not from this file: they name
+# real resources in a real subscription, and this repository is public. They are
+# not secrets — knowing them grants nothing without the OIDC trust below — but
+# they are also nobody's business. Set AZURE_RESOURCE_GROUP, AZURE_CONTAINER_APP,
+# AZURE_REGISTRY and AZURE_IMAGE_NAME under Settings → Secrets and variables →
+# Actions → Variables.
+env:
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  CONTAINER_APP: ${{ vars.AZURE_CONTAINER_APP }}
+  REGISTRY: ${{ vars.AZURE_REGISTRY }}
+  IMAGE_NAME: ${{ vars.AZURE_IMAGE_NAME }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # No `environment:` yet on purpose. A GitHub environment that doesn't exist
+    # makes the job refuse to start, and naming one here before creating it
+    # would mean the first deploy fails for a reason unrelated to deploying.
+    # Environment protection on main is T48's job, together with the approval
+    # rules that are the actual point of it.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      # Deploy is gated on CI's verdict for this exact commit.
+      #
+      # It was not, and on 2026-08-11 that produced the worst arrangement of two
+      # signals available: CI failed on a commit (T15's blob tests had no
+      # Azurite in CI and every one of them errored) while the deploy for the
+      # same commit went green, because deploying runs no tests. The signal
+      # anyone actually looks at reported that the change was fine.
+      #
+      # Keyed on the resolved SHA rather than the branch name, so re-running a
+      # deploy after new commits land cannot inherit an older green verdict.
+      # "CI has not run yet" is refused as firmly as "CI failed": an unverified
+      # commit and a failing one are equally unfit to deploy, and treating a
+      # missing answer as a passing one is how gates quietly become decorative.
+      - name: Require a green CI run for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "Deploying ${{ inputs.ref }} -> $sha"
+
+          read -r status conclusion url <<< "$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=$sha&per_page=1" \
+            --jq '.workflow_runs[0] | "\(.status // "missing") \(.conclusion // "none") \(.html_url // "-")"')"
+
+          echo "CI status=$status conclusion=$conclusion"
+          echo "$url"
+
+          if [ "$status" = "missing" ]; then
+            echo "::error::No CI run exists for $sha. Push the commit and let CI finish before deploying it."
+            exit 1
+          fi
+          if [ "$status" != "completed" ]; then
+            echo "::error::CI for $sha is still $status. Wait for it rather than deploying a commit nobody has checked."
+            exit 1
+          fi
+          if [ "$conclusion" != "success" ]; then
+            if [ "${{ inputs.deploy_without_ci }}" = "true" ]; then
+              echo "::warning::CI concluded '$conclusion' for $sha, overridden deliberately via deploy_without_ci."
+            else
+              echo "::error::CI concluded '$conclusion' for $sha. Fix it, or re-run with deploy_without_ci if this is a deliberate emergency."
+              exit 1
+            fi
+          fi
+
+      # The image is tagged with the commit it was built from, so a deployed
+      # revision can always be traced back to a specific source state. `latest`
+      # is moved too, purely for convenience when pulling by hand.
+      - name: Compute image tag
+        id: tag
+        run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # The same gates CI runs. A deploy that skips them can ship something a
+      # pull request would have rejected.
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # `az containerapp` is a CLI *extension*, not part of the base install on
+      # GitHub runners. Without this the deploy step dies on "extension not
+      # installed": dynamic install prompts, and a prompt in CI is a failure.
+      - name: Install the containerapp CLI extension
+        run: az extension add --name containerapp --only-show-errors
+
+      - name: Build and push image
+        run: |
+          # The registry's short name is the login server minus its domain.
+          az acr login --name "${REGISTRY%%.*}"
+          docker build \
+            -t "$REGISTRY/$IMAGE_NAME:${{ steps.tag.outputs.sha }}" \
+            -t "$REGISTRY/$IMAGE_NAME:latest" .
+          docker push "$REGISTRY/$IMAGE_NAME:${{ steps.tag.outputs.sha }}"
+          docker push "$REGISTRY/$IMAGE_NAME:latest"
+
+      # Migrations are NOT run here. They currently run
+      # from a workstation against the server's firewall allow-list, which is a
+      # decision to make deliberately rather than to smuggle into a deploy step:
+      # an automatic migration on every deploy needs a rollback story first.
+
+      - name: Deploy revision
+        run: |
+          az containerapp update \
+            --name "$CONTAINER_APP" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "$REGISTRY/$IMAGE_NAME:${{ steps.tag.outputs.sha }}"
+
+      # A deploy that reports success without asking the app whether it is
+      # actually serving is not a verification. Readiness checks the database
+      # too, so a broken connection string fails here rather than silently.
+      - name: Verify the new revision is ready
+        run: |
+          FQDN=$(az containerapp show --name "$CONTAINER_APP" --resource-group "$RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "Probing https://$FQDN/health/ready"
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://$FQDN/health/ready" || true)
+            echo "  attempt $i: $code"
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "::error::Readiness never returned 200 — the revision is not serving."
+          exit 1

@@ -1,0 +1,1 @@
+ALTER TABLE "resume_extractions" ADD COLUMN "prompt_version" text;

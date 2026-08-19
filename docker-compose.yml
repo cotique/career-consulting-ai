@@ -1,0 +1,45 @@
+# Pinned so the Compose project id stops being derived from the directory name.
+# Without this, renaming the checkout silently creates a second project with
+# fresh volumes, and the local Postgres and Azurite come up empty while the old
+# data sits in orphaned volumes nobody looks for.
+#
+# Deliberately keeps the original value rather than following the product rename:
+# it is an identifier for existing local state, the same category as the Azure
+# resource names and the `job_search_ai` database below, none of which were
+# renamed either. Changing it buys tidiness and costs everyone's local data.
+name: job-search-ai
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: jobsearch
+      POSTGRES_PASSWORD: localdev
+      POSTGRES_DB: job_search_ai
+    ports:
+      - '5433:5432'  # 5432 is taken by another local project's container
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    # --skipApiVersionCheck: @azure/storage-blob 12.33 negotiates a service API
+    # version (2026-06-06) newer than this Azurite release knows about, and
+    # Azurite rejects the request outright rather than degrading — so every blob
+    # call fails locally while working against real Azure, which does support it.
+    # The flag is Microsoft's own answer to that skew. Revisit when an Azurite
+    # release catches up with the SDK.
+    command: 'azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck'
+    ports:
+      - '10000:10000'
+    volumes:
+      - azurite-data:/data
+
+# Background jobs run on pg-boss inside the postgres service above (own
+# schema) — no separate queue container. See ARCHITECTURE.md's execution
+# model; the previous self-hosted Temporal services were removed by the
+# 2026-08-09 architecture review.
+
+volumes:
+  postgres-data:
+  azurite-data:

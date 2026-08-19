@@ -1,0 +1,23 @@
+{
+  "source": "C:/claude/projects/claude-discipline-pack",
+  "components": [
+    "hooks"
+  ],
+  "files": {
+    ".claude/hooks/block-protected-branch.sh": "bd9b6a0c32c64ad77dfa45d4125bd938d4b75544e43cb8a192e72790d711a53e",
+    ".claude/hooks/dod-gate.sh": "4de75fef7155d70ae14793e4773bccd58d75a39c99c89216f61f28458626c16a",
+    ".claude/hooks/format-postcheck.sh": "07de595ea4259842c8571a30e17164ff84795fc6767ac743be3555afd68240df",
+    ".claude/hooks/kb-first-reminder.sh": "9b94fa460cee0d8e4855d9adb0bd5b30959fc6bfebce6f8c91919c294bf452cd",
+    ".claude/hooks/secret-guard.sh": "f44d839637a9d2f02cdd3a9a591be7cafb0bb65aa7b797b8b31a16588256e10c",
+    ".claude/hooks/session-envelope.sh": "0342ee7c8c70c3c0b3fc0a573b4b770438885a39abd739f0f52cd8b88a683759",
+    ".claude/hooks/_events.sh": "82e85801a90ba507fa4641fa31c2b67a4b94549356a82a399db984be174b70cc",
+    ".claude/hooks/block-protected-branch.ps1": "bcc74e68f9575a51de535bb1204827c7f80c4c9eae1896927e097c97492ade92",
+    ".claude/hooks/dod-gate.ps1": "68b07afcea1a3397baa9b02eb8f2040adc5976d4a09b1a200ce3cc5fbf76986f",
+    ".claude/hooks/format-postcheck.ps1": "1be78c712bfea59b66513662595c451f13127f411d1e64d2d0e4f8200f58568a",
+    ".claude/hooks/kb-first-reminder.ps1": "cd74454f0bc3f596969f8d69f136ac0275c0c45f76b41d9e2ae1a4f016c61260",
+    ".claude/hooks/secret-guard.ps1": "5d1b29a55a4da11a921602ac0260c64503cd137256f2bf1c9366bac8cbd204aa",
+    ".claude/hooks/session-envelope.ps1": "11896223066613423991fb10a8b4706d17914b70bb19aa05a4affe30f4d49b14",
+    ".claude/hooks/_events.ps1": "195fe1f2ab0354f8bd4e2e344786a4c39791f419a58f1e4255be081ede21dd0f"
+  },
+  "packVersion": "0.3.0"
+}

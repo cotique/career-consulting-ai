@@ -1,0 +1,1 @@
+ALTER TABLE "llm_usage_logs" ADD COLUMN "attempt" integer DEFAULT 1 NOT NULL;
