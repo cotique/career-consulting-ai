@@ -120,6 +120,18 @@ A hybrid wizard, not a plain questionnaire:
 
 CI (install/typecheck/lint/build/test) runs on every push. The **deploy job is manually triggered** (`workflow_dispatch`), never automatic on push or merge — a deploy is a deliberate action, not a side effect of merging. It authenticates to Azure through GitHub OIDC federation with no stored credential, refuses any commit whose CI run is not green (a missing run counts as not green), and probes readiness afterwards rather than trusting its own exit code.
 
+### Branching
+
+Work happens on a branch taken from `develop`, and `develop` is where it integrates. `main` is never committed to directly, and only ever advances by merge.
+
+That is enforced rather than agreed: a hook refuses commit, merge, rebase and `reset --hard` while the working tree is on a protected branch, and refuses pushes by refspec. It became a hook because the rule was broken twice while it depended on someone remembering it.
+
+**`main` advances one epic at a time, once that epic has been exercised on `develop`.** So it names the last epic that was actually tested, not the newest commit that happened to pass CI. `develop` sitting several commits ahead is the normal state, and the gap is the point: it is the work that has not yet earned a place on `main`.
+
+Deploys run from `develop`. What makes that safe is the gate described above, not the branch: a deploy refuses any commit without a green CI run for that exact SHA, so a branch being "the integration branch" never becomes an argument for deploying something unverified.
+
+Branch names carry what the branch is for: epic branches name their epic (`epic4-resume`), everything else names its kind (`docs/`, `chore/`, `fix/`).
+
 ## UI: web or mobile
 
 **Web, responsive, no native app at launch.** One codebase, no app store review/delays, instant updates. If a "like an app on the phone" experience is needed later (home-screen icon, offline, push) — **PWA** on top of the same web code, not a separate native build. Native (Swift/Kotlin/React Native) — only if a concrete reason comes up that a PWA can't cover.
