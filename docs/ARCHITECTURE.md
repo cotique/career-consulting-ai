@@ -132,6 +132,8 @@ Deploys run from `develop`. What makes that safe is the gate described above, no
 
 Branch names carry what the branch is for: epic branches name their epic (`epic4-resume`), everything else names its kind (`docs/`, `chore/`, `fix/`).
 
+**When work on a project stops, `develop` merges into the release branch.** A frozen project leaves its default branch showing whatever it happened to show, which is the state a reader is handed first — and a repository whose front page describes active work reads as active work, however plainly the decision was recorded elsewhere. The merge is what makes the freeze visible.
+
 ### Tests
 
 What counts as mandatory, so that "tests are required" means something specific:
