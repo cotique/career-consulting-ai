@@ -6,6 +6,35 @@ on:
   pull_request:
 
 jobs:
+
+  # Kept a separate job rather than a step: it needs the full history, which the
+  # build job deliberately does not fetch, and it has nothing to wait for — a
+  # leak is worth knowing about even if the build is broken.
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history, not the tip. A secret that was committed and then
+          # removed is still in the history and still readable, which is the case
+          # a tip-only scan misses entirely.
+          fetch-depth: 0
+
+      # The binary from a pinned release rather than the vendor's Action: the
+      # Action asks organisations for a licence key, which is a dependency on
+      # billing state for something that should just run, and it would also be a
+      # third party handed the contents of the repository. A pinned tarball is
+      # neither.
+      - name: Scan the history for secrets
+        env:
+          GITLEAKS_VERSION: '8.30.1'
+        run: |
+          curl -sSfL --retry 3             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"             -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          # --redact so a finding does not print the secret into a build log that
+          # is more widely readable than the place it leaked from.
+          /tmp/gitleaks detect --source . --redact --no-banner
+
   build:
     runs-on: ubuntu-latest
 
@@ -66,7 +95,6 @@ jobs:
       - run: npm run db:migrate
       - run: npm test
 
-# Deploy job intentionally not added yet — see docs/TRADEOFFS.md
-# ("no deploy to Azure until Epic 3 is done"). Add a deploy job here,
-# manually triggered (workflow_dispatch), once auth (T12) and the
-# cost-guard (T11) land.
+# Deploying lives in deploy.yml, manually triggered and gated on a green run of
+# this workflow for the exact commit. It is deliberately not a job here: a
+# deploy is an act someone takes, not a consequence of a merge.

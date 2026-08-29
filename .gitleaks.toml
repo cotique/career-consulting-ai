@@ -1,0 +1,30 @@
+# Allowlist for the secret scan. Deliberately narrow: an entry that silences a
+# whole file would also silence the real thing if it ever landed there, which is
+# the failure this scan exists to prevent. Each entry says what it permits and
+# why, so the decision can be re-read rather than re-derived.
+
+[extend]
+useDefault = true
+
+# Azurite's development account key, as it stands in the first commit. It was
+# removed from the working tree in favour of the SDK's documented emulator
+# shorthand, so nothing going forward carries it — but a scan reads history, and
+# history does not change. This entry is what that costs, and it is the honest
+# price: the alternative is rewriting history to erase a value that is published
+# by its vendor and identical in every installation.
+#
+# Matched by its exact value rather than by path, so any *other* credential that
+# ever appears in the same file is still a finding.
+[[allowlists]]
+description = "Azurite well-known local development key, present in history"
+regexes = ['Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u']
+
+# SHA-256 digests of the vendored hook files. What actually trips the rule is
+# the word "secret" in two of the file names it lists — the other eleven digests
+# in the same file, identical in form, are not flagged. Scoped to that file and
+# to values that are exactly a 64-character hex digest, so anything in it that
+# is not a digest still gets caught.
+[[allowlists]]
+description = "Content digests in the vendored hook manifest"
+paths = ['\.claude/discipline-manifest\.json$']
+regexes = ['^[a-f0-9]{64}$']
