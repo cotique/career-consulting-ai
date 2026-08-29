@@ -132,6 +132,29 @@ Deploys run from `develop`. What makes that safe is the gate described above, no
 
 Branch names carry what the branch is for: epic branches name their epic (`epic4-resume`), everything else names its kind (`docs/`, `chore/`, `fix/`).
 
+**When work on a project stops, `develop` merges into the release branch.** A frozen project leaves its default branch showing whatever it happened to show, which is the state a reader is handed first — and a repository whose front page describes active work reads as active work, however plainly the decision was recorded elsewhere. The merge is what makes the freeze visible.
+
+### Tests
+
+What counts as mandatory, so that "tests are required" means something specific:
+
+- **Anything touching user-owned data proves isolation against a real database.** Not a mock: the isolation is enforced by row-level security, and a mock cannot be wrong in the way the real thing can. Two users are seeded, and the assertion is that a plain query returns one user's rows.
+- **Anything crossing a boundary is exercised through that boundary.** An upload endpoint is driven over HTTP with a real multipart body rather than by calling the handler, because routing, the multipart parser and the binary response are where an upload goes wrong, and none of them exist when a function is called directly.
+- **Every defect found by hand gets a regression test before the fix is committed.** Several defects here lived on failure paths a green suite never touched; the test is what stops the next change from restoring them.
+- **Prompt templates carry a fingerprint test** that fails when the text changes without a version bump.
+- **No test spends money.** The provider is always a fake. A test that reached a real model would be slow, non-deterministic and billed.
+
+`npm test` runs them. They need the local stand (`docker compose up -d`) and migrations applied; the README has the sequence.
+
+### Review
+
+One developer, so there is no rotation to name. What stands in for one:
+
+- **An automated pass runs over the change before it is proposed.** The repository carries review skills under `.claude/skills` covering conventions, architecture and requirements conformance as separate passes rather than one merged pass, because merged into a single pass the requirements check always loses.
+- **A human approves before anything merges**, on the diff rather than on a description of it.
+- **What blocks a merge:** a failing gate (typecheck, lint, tests), a convention from `CLAUDE.md`, or an unrecorded deviation from a decision in this document. Everything else is a comment.
+- **Essentially all code here is machine-generated**, which is why the automated pass exists at all. At this volume "assign a reviewer" does not scale, and the pass that finds behaviour nobody asked for matters more than the one that finds typos.
+
 ## UI: web or mobile
 
 **Web, responsive, no native app at launch.** One codebase, no app store review/delays, instant updates. If a "like an app on the phone" experience is needed later (home-screen icon, offline, push) — **PWA** on top of the same web code, not a separate native build. Native (Swift/Kotlin/React Native) — only if a concrete reason comes up that a PWA can't cover.
