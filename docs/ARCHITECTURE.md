@@ -45,6 +45,19 @@ Column lists live in `src/db/schema.ts`. What matters here are the rules that sc
 
 - **Retrieval, when it arrives**: one embedding model across the whole system, with `embedding_model_version` stored beside every vector so a model change is an explicit "this vector is stale" flag rather than a silent decay in search quality. HNSW rather than IVFFlat — the latter needs training on data and behaves poorly on small, growing tables, and at this volume the speed difference would not be noticeable. Nothing in the built code produces a vector yet, so this constrains nothing so far.
 
+## RAG chatbot over the job-search corpus (2026-08-28)
+
+*The first thing that actually produces a vector — everything above this line was reserved space, this is the decision.*
+
+**Scope**: a chat feature answering questions over the user's own job-search material (interview cases, resume-tailoring notes, applications, strategy) — not a general assistant. **Corpus source is the existing markdown files, not a new authoring surface**: they stay the source of truth and get *ingested*, consistent with the standing rule against markdown-as-primary-store (line 29 above) — the searchable copy is chunked text + embedding in Postgres, the `.md` files are never queried live.
+
+- **Storage**: a new table, `corpus_chunks` (`user_id`, `source_path`, `chunk_text`, `embedding vector`, `embedding_model_version`), same Postgres, same pgvector/HNSW setup already reserved for this. No second vector service (Azure AI Search or otherwise) — that would duplicate a capability the schema already budgeted for.
+- **Ingestion is job-shaped**: chunking + embedding a folder of markdown is exactly the "slow, failure-prone, worth retrying" work the execution model already reserves for pg-boss, not a synchronous request handler. Re-ingestion is idempotent on `(user_id, source_path, chunk_index)`.
+- **Query-time retrieval + generation is the synchronous chat path** (NFR8 — latency-sensitive, nothing gets queued for uniformity): embed the question, pgvector top-k against `corpus_chunks`, assemble context, one generation call.
+- **Provider — Azure AI Foundry (the renamed/unified surface, formerly reached as a standalone "Azure OpenAI resource")**, as a second `LlmProvider` implementation (parallel to the already-scoped-but-unbuilt Vertex-EU path in `TRADEOFFS.md`), used for both the embedding and the generation call in this feature specifically. Picked deliberately on the current name rather than the legacy resource type: nothing exists yet, so there is no standalone-resource deployment to later migrate off — building straight on Foundry avoids that migration entirely. The reason for touching it at all is the same kind already on record for choosing Azure hosting: an explicit learning goal (hands-on with Azure's actual AI platform, not just Container Apps/Postgres/Blob), not a technical requirement — the existing Anthropic-direct provider stays the default everywhere else in the system. This is a hosted managed model end to end; nothing here is self-trained or self-hosted.
+- **No new deploy surface**: same Container Apps app, same Key Vault for the new provider's key, same rate limiting.
+- **The corpus is this application's own data, not a folder somewhere.** What the chat answers over is what the system already holds for that user — extracted resumes, parsed vacancies, scores, tailored documents, applications and their event timeline. Ingestion therefore derives chunks from those rows rather than crawling a filesystem, and nothing outside the database is a source. Two things follow. First, ownership and erasure need no separate treatment: a chunk is derived from a row that already carries `user_id` and already cascades, so the delete path that exists keeps working and NFR6 is not reopened. Second, staleness has a definition rather than a heuristic — a chunk is stale when the row it came from changed, which is observable, instead of being guessed from filenames or dates. Material a user keeps elsewhere enters the way everything else already enters, through the application's own interfaces; there is no ingestion path that reads a machine.
+
 ### Resumes and other PII — a separate zone
 
 - Separate **object storage** (S3/GCS-equivalent) for raw resume files, not the shared DB. Encryption at rest, access strictly scoped by `user_id`, no public URLs.
@@ -106,6 +119,41 @@ A hybrid wizard, not a plain questionnaire:
 **GitHub** (code) + **GitHub Actions** (CI/CD) — deploy to Azure Container Apps via the official `azure/container-apps-deploy-action`. Considered Azure DevOps Pipelines as an alternative for Azure learning-value, but that didn't apply (the stack is already familiar), so the decision rests on pure practical merits: a wider community/more examples for Node/TS, a generous free tier, no risk of a delayed free-tier grant on a brand-new Azure DevOps organization, and no tying of CI/CD to Azure beyond the deploy step itself.
 
 CI (install/typecheck/lint/build/test) runs on every push. The **deploy job is manually triggered** (`workflow_dispatch`), never automatic on push or merge — a deploy is a deliberate action, not a side effect of merging. It authenticates to Azure through GitHub OIDC federation with no stored credential, refuses any commit whose CI run is not green (a missing run counts as not green), and probes readiness afterwards rather than trusting its own exit code.
+
+### Branching
+
+Work happens on a branch taken from `develop`, and `develop` is where it integrates. `main` is never committed to directly, and only ever advances by merge.
+
+That is enforced rather than agreed: a hook refuses commit, merge, rebase and `reset --hard` while the working tree is on a protected branch, and refuses pushes by refspec. It became a hook because the rule was broken twice while it depended on someone remembering it.
+
+**`main` advances one epic at a time, once that epic has been exercised on `develop`.** So it names the last epic that was actually tested, not the newest commit that happened to pass CI. `develop` sitting several commits ahead is the normal state, and the gap is the point: it is the work that has not yet earned a place on `main`.
+
+Deploys run from `develop`. What makes that safe is the gate described above, not the branch: a deploy refuses any commit without a green CI run for that exact SHA, so a branch being "the integration branch" never becomes an argument for deploying something unverified.
+
+Branch names carry what the branch is for: epic branches name their epic (`epic4-resume`), everything else names its kind (`docs/`, `chore/`, `fix/`).
+
+**When work on a project stops, `develop` merges into the release branch.** A frozen project leaves its default branch showing whatever it happened to show, which is the state a reader is handed first — and a repository whose front page describes active work reads as active work, however plainly the decision was recorded elsewhere. The merge is what makes the freeze visible.
+
+### Tests
+
+What counts as mandatory, so that "tests are required" means something specific:
+
+- **Anything touching user-owned data proves isolation against a real database.** Not a mock: the isolation is enforced by row-level security, and a mock cannot be wrong in the way the real thing can. Two users are seeded, and the assertion is that a plain query returns one user's rows.
+- **Anything crossing a boundary is exercised through that boundary.** An upload endpoint is driven over HTTP with a real multipart body rather than by calling the handler, because routing, the multipart parser and the binary response are where an upload goes wrong, and none of them exist when a function is called directly.
+- **Every defect found by hand gets a regression test before the fix is committed.** Several defects here lived on failure paths a green suite never touched; the test is what stops the next change from restoring them.
+- **Prompt templates carry a fingerprint test** that fails when the text changes without a version bump.
+- **No test spends money.** The provider is always a fake. A test that reached a real model would be slow, non-deterministic and billed.
+
+`npm test` runs them. They need the local stand (`docker compose up -d`) and migrations applied; the README has the sequence.
+
+### Review
+
+One developer, so there is no rotation to name. What stands in for one:
+
+- **An automated pass runs over the change before it is proposed.** The repository carries review skills under `.claude/skills` covering conventions, architecture and requirements conformance as separate passes rather than one merged pass, because merged into a single pass the requirements check always loses.
+- **A human approves before anything merges**, on the diff rather than on a description of it.
+- **What blocks a merge:** a failing gate (typecheck, lint, tests), a convention from `CLAUDE.md`, or an unrecorded deviation from a decision in this document. Everything else is a comment.
+- **Essentially all code here is machine-generated**, which is why the automated pass exists at all. At this volume "assign a reviewer" does not scale, and the pass that finds behaviour nobody asked for matters more than the one that finds typos.
 
 ## UI: web or mobile
 

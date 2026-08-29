@@ -4,6 +4,8 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { CorrelatedLogger } from './observability/correlated-logger';
+import { requestIdMiddleware } from './observability/request-id.middleware';
 import { startTelemetry } from './observability/telemetry';
 
 async function bootstrap() {
@@ -11,7 +13,15 @@ async function bootstrap() {
   // libraries it patches start being used.
   await startTelemetry();
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    // Every log line carries the id of the request that produced it.
+    logger: new CorrelatedLogger(),
+  });
+
+  // First, before anything that might log or fail: a request that is rejected
+  // by a guard or a body parser still needs an id, and an id assigned after
+  // those would be missing from exactly the lines worth reading.
+  app.use(requestIdMiddleware);
   app.use(cookieParser());
 
   // Trust exactly one proxy hop, so the client IP comes from X-Forwarded-For
