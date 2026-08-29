@@ -126,7 +126,11 @@ Work happens on a branch taken from `develop`, and `develop` is where it integra
 
 That is enforced rather than agreed: a hook refuses commit, merge, rebase and `reset --hard` while the working tree is on a protected branch, and refuses pushes by refspec. It became a hook because the rule was broken twice while it depended on someone remembering it.
 
-**`main` advances one epic at a time, once that epic has been exercised on `develop`.** So it names the last epic that was actually tested, not the newest commit that happened to pass CI. `develop` sitting several commits ahead is the normal state, and the gap is the point: it is the work that has not yet earned a place on `main`.
+**`main` takes whole updates, never fragments.** Something moves there when it is finished and every part of it has been exercised — not when it merely passes CI. Half a feature can be perfectly green and still has no business on the release branch, because what `main` is for is naming a state someone could stand on.
+
+The unit is therefore the coherent change rather than the commit or the calendar. Usually that is an epic; it can equally be a round of infrastructure or documentation that is complete in itself. What it is never is "whatever happens to be on `develop` today".
+
+`develop` sitting several commits ahead is the normal state, and the gap is the point: it holds the work still in pieces. Draining it for tidiness is the mistake this rule exists to prevent.
 
 Deploys run from `develop`. What makes that safe is the gate described above, not the branch: a deploy refuses any commit without a green CI run for that exact SHA, so a branch being "the integration branch" never becomes an argument for deploying something unverified.
 
