@@ -3,7 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule, seconds } from '@nestjs/throttler';
 
 /**
- * API-layer rate limiting — the TRADEOFFS entry whose trigger was "at the first
+ * API-layer rate limiting — deferred until "at the first
  * deploy". It is a separate control from the LLM budget caps: those bound
  * *spend*, this bounds *requests*, and a loop hammering a cheap endpoint costs
  * nothing in tokens while still being a problem.
@@ -27,7 +27,7 @@ import { ThrottlerGuard, ThrottlerModule, seconds } from '@nestjs/throttler';
  * Storage is in-process. With `min-replicas: 0, max-replicas: 1` that is the
  * whole picture; at more than one replica each replica would keep its own
  * counters and the effective limit would multiply by the replica count.
- * Recorded in TRADEOFFS rather than solved with a Redis dependency nobody
+ * Recorded in docs/ARCHITECTURE.md rather than solved with a Redis dependency nobody
  * needs yet.
  */
 @Module({

@@ -18,7 +18,8 @@ const importJose = () => import('jose');
  * nothing sticky for a scale-to-zero container deployment, where instances
  * come and go between requests.
  *
- * Known tradeoff (recorded in docs/TRADEOFFS.md): a session cannot be revoked
+ * Known tradeoff (see "Deliberately deferred" in docs/ARCHITECTURE.md): a
+ * session cannot be revoked
  * before it expires. Acceptable for a single dogfood user; revisit before
  * external users, when revocation and device management start to matter.
  */

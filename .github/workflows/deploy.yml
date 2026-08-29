@@ -22,7 +22,7 @@ on:
         default: false
 
 # Federated credentials (OIDC) instead of a stored ACR password or service
-# principal secret — the TRADEOFFS entry whose revisit trigger was "before
+# principal secret — replacing the stored credential that was acceptable "before
 # treating this as a durable CI setup". `id-token: write` is what lets the job
 # request the OIDC token Azure trusts.
 permissions:

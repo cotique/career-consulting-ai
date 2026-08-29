@@ -1,5 +1,5 @@
 // Static price table, USD per million tokens. Known accepted risk: this can
-// drift from provider pricing over time — tracked in docs/TRADEOFFS.md;
+// drift from provider pricing over time;
 // re-check whenever a model is added or swapped in task-config.ts.
 interface ModelPricing {
   inputPerMTok: number;

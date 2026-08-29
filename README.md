@@ -1,49 +1,60 @@
 # career-consulting-ai
 
-A career-consulting backend: positioning and the job-search cycle — sourcing,
-scoring, tailored documents, interview prep, application tracking.
+A backend for the job-search cycle, built as a study of how to make an
+LLM-backed service that can be trusted with someone's own data: one entry point
+for every model call, prompts as versioned artifacts, per-request database
+isolation, and spend that stops rather than being reported afterwards.
 
-TypeScript/NestJS modular monolith, Postgres with pgvector, one versioned LLM
-layer, containerized and deployed on Azure Container Apps.
+TypeScript, NestJS, Postgres, containerized and deployed to Azure Container
+Apps through a manually triggered pipeline.
 
-## If you're looking for the parts worth reading
+## What is built
 
-- **`src/llm`** — the only place a provider SDK is imported. Prompts are prose in
-  git behind a versioned registry; a fingerprint test fails if the text changes
-  without a version bump; trusted and untrusted input are separated structurally
-  rather than by convention; spend is bounded per attempt, per conversation and
-  per month. Rationale in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
-- **`src/resumes`, `src/storage`** — upload to blob storage kept apart from the
-  extracted structure, so the raw file can be dropped without losing what the
-  system reasons over.
-- **`drizzle/`** — row-level security forced on every table, and the
-  expand/contract migration rule in [ARCHITECTURE.md](docs/ARCHITECTURE.md),
-  which exists because reversing a migration that dropped a column recreates it
-  empty.
-- **`src/auth`** — identity by `(provider, external_id)` only, never by email;
-  admission by an allow-list that fails closed.
-- **`.github/workflows/deploy.yml`** — deploying is a manual act, gated on CI's
-  verdict for that exact commit, and it checks the revision is actually serving
-  before reporting success.
-- **[TRADEOFFS.md](docs/TRADEOFFS.md)** — what was knowingly left unhardened, and
-  why that was the right call at this scale.
+Sign-in through Google, an onboarding profile with a free-text step the model
+parses, resume upload with structured extraction, account export and deletion,
+and the layer all of that runs on.
+
+Everything else the schema anticipates — vacancy intake, scoring, the
+application tracker — exists as tables and empty modules and no more. The
+project was stopped at that point deliberately; see the architecture document
+for what was decided and what was left.
+
+## The parts worth reading
+
+- **`src/llm`** — the only place a provider SDK is imported. Prompts live as
+  prose in git behind a versioned registry, and a fingerprint test fails if the
+  text changes without the version moving, so an output comparison can never
+  silently span two different prompts. Spend is checked before every attempt,
+  including retries, and the usage row is written on the layer's own connection
+  so that a caller's rollback cannot erase the record of money already spent.
+- **`src/db`** — row-level security forced on every table, with the per-request
+  user context set in one place. The application connects as a role that cannot
+  bypass it.
+- **`src/auth`** — identities matched on the provider's immutable subject and
+  never on email; admission separate from authentication, defaulting to nobody.
+- **`.github/workflows`** — CI on every push; deploying is a separate manual
+  act, refused for any commit whose CI run is not green, and the whole history
+  is scanned for secrets.
 
 ## Docs
 
-Two, on purpose. [ARCHITECTURE.md](docs/ARCHITECTURE.md) — the decisions, the
-data-model rules, and the requirements the code cites by number.
-[TRADEOFFS.md](docs/TRADEOFFS.md) — what was knowingly left unhardened, and why
-that was the right call at this scale.
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — the decisions and why they were
+  made, including the ones that were reversed and what reversed them.
+- **[CLAUDE.md](CLAUDE.md)** — the rules that follow from those decisions, for
+  whoever writes code here.
 
 ## Running it locally
 
 ```
 docker compose up -d      # Postgres + Azurite
-cp .env.example .env      # then fill in the real values
+cp .env.example .env      # then fill in the values it asks for
 npm ci
 npm run db:migrate
 npm run start:local
 ```
 
-Tests need that same local Postgres: `npm test`. CI enforces `typecheck`, `lint`,
-`build`, `test`.
+Tests need that same local Postgres and Azurite: `npm test`. CI runs
+`typecheck`, `lint`, `build` and `test`, plus a secret scan over the history.
+
+Deploying needs cloud resources of your own; the workflow takes every name from
+repository variables and has no defaults.

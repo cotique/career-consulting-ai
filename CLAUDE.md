@@ -9,8 +9,8 @@ source and this is the summary.
 
 ## The rules that matter most
 
-**Every provider SDK import lives in `src/llm/providers`.** Nothing else calls a
-model directly. Routing, spend limits, usage accounting and the untrusted-text
+**Every model call goes through `src/llm`, and no provider SDK is imported
+anywhere else.** Routing, spend limits, usage accounting and the untrusted-text
 convention all live behind that one entry point, so a call made around it
 silently escapes every one of them.
 
@@ -20,8 +20,10 @@ A fingerprint test fails if the text changes without a version bump, because
 comparing outputs across an unlabelled prompt change produces a conclusion
 about the world that is really a conclusion about the prompt.
 
-**Text from outside the system is untrusted**, including model output fed back
-in. It is rendered inside data delimiters by one path. A caller that can
+**Text from outside the system is untrusted.** It is rendered inside data
+delimiters by one path. Model output counts as untrusted on the way back: a
+rejected response never re-enters the instruction half of a retry — only the
+validation errors do, escaped, because they quote what was received. A caller that can
 concatenate instructions with untrusted content eventually will.
 
 **User-owned data is read through a user-scoped connection.** Row-level
