@@ -114,8 +114,10 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      # The same gates CI runs. A deploy that skips them can ship something a
-      # pull request would have rejected.
+      # Not a re-run of CI: the gate above already required a green CI run for
+      # this exact commit, tests and secret scan included. These four are what
+      # the image build needs anyway, and running them here fails fast on a
+      # dependency that resolves differently than it did in CI.
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint

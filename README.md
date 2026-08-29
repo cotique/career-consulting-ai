@@ -15,7 +15,8 @@ parses, resume upload with structured extraction, account export and deletion,
 and the layer all of that runs on.
 
 Everything else the schema anticipates — vacancy intake, scoring, the
-application tracker — exists as tables and empty modules and no more. The
+application tracker — exists as tables and empty modules and no more, and
+document tailoring was dropped from scope entirely. The
 project was stopped at that point deliberately; see the architecture document
 for what was decided and what was left.
 

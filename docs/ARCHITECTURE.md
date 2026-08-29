@@ -124,17 +124,19 @@ Decisions not made, as distinct from the decisions made and recorded above:
 
 ## Requirement identifiers
 
-The code and tests cite these in comments and test names; this is where they resolve. Only the ones actually cited are listed.
+The code and tests cite these in comments and test names. This is an index, not a second statement of the decisions: each entry says what the identifier names and which section above decides it. Only identifiers the code actually cites are listed.
 
-- **FR1** — sign-in through an external identity provider, no self-managed passwords.
-- **FR4** — resume upload, with the raw file and its extracted structure stored separately.
-- **FR5** — the account owner can export or delete everything in one action.
-- **FR21** — onboarding is step-addressable, so a later positioning step could be added without restructuring the payload. Cited by the code as the reason for a shape; the step itself was never built.
-- **NFR1** — every model call is metered: tokens, model, task, cost estimate, and the prompt version that produced it.
-- **NFR2** — spend is capped per attempt, per conversation and per user per month, and the caps refuse rather than warn.
-- **NFR3** — secrets come from a managed store through one code path.
-- **NFR4** — files are reachable only through an authenticated endpoint.
-- **NFR5** — user-owned data is read through a user-scoped connection, with row-level security enforced beneath it.
-- **NFR6** — deletion and export exist from the first release rather than as a retrofit.
-- **NFR11** — one entry point for model calls; no provider SDK imported anywhere else.
-- **NFR16** — no recovery mechanism outlives a deletion request.
+| | Names | Decided in |
+|---|---|---|
+| **FR1** | sign-in through an external provider, no self-managed passwords | Data model, and `src/auth` |
+| **FR4** | resume upload | Data model — the raw/structured split |
+| **FR5** | export and deletion in one action | Personal data |
+| **FR21** | onboarding is step-addressable | cited by the code as the reason for a payload shape; the step itself was never built |
+| **NFR1** | every model call is metered | The LLM layer |
+| **NFR2** | spend capped per attempt, per conversation, per month | The LLM layer |
+| **NFR3** | secrets from a managed store through one path | Hosting |
+| **NFR4** | files reachable only through an authenticated endpoint | Personal data |
+| **NFR5** | user-scoped connection with row-level security beneath it | Data model |
+| **NFR6** | deletion and export from the first release | Personal data |
+| **NFR11** | one entry point for model calls | The LLM layer |
+| **NFR16** | no recovery mechanism outlives a deletion request | Personal data |

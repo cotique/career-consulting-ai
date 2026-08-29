@@ -27,7 +27,7 @@ import { ThrottlerGuard, ThrottlerModule, seconds } from '@nestjs/throttler';
  * Storage is in-process. With `min-replicas: 0, max-replicas: 1` that is the
  * whole picture; at more than one replica each replica would keep its own
  * counters and the effective limit would multiply by the replica count.
- * Recorded in docs/ARCHITECTURE.md rather than solved with a Redis dependency nobody
+ * Deliberately not solved with a shared store: that is a dependency nobody
  * needs yet.
  */
 @Module({
