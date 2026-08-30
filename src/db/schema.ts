@@ -200,6 +200,10 @@ export const vacancyScores = pgTable('vacancy_scores', {
     .references(() => vacancies.id, { onDelete: 'cascade' }),
   score: numeric('score').notNull(),
   verificationNotes: text('verification_notes'),
+  // The two analyses (T17) plus the blockers that applied at scoring time:
+  // { presentable, tradeoff: { fits, doesNotFit }, blockers }. Nullable —
+  // deferred out of 0013 (T16) to land with the feature that writes it.
+  breakdown: jsonb('breakdown'),
   modelUsed: text('model_used').notNull(),
   promptVersion: text('prompt_version').notNull(),
   tenantId: uuid('tenant_id'),

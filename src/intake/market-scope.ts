@@ -20,7 +20,9 @@ export interface VacancyBlocker {
 }
 
 /**
- * The only blocker knowable at intake (NFR15). Scoring adds the rest.
+ * The only blocker kind that exists (NFR15). Scoring (T17) re-surfaces this
+ * same computation rather than adding a second blocker vocabulary — nothing
+ * yet needs a blocker that only scoring, not intake, could know about.
  *
  * An unknown country is deliberately not a blocker: the posting not saying
  * where the work is, and the work being somewhere unsupported, are different

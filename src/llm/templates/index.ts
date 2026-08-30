@@ -2,6 +2,7 @@ import { loadTemplateText } from './load-text';
 import { onboardingParse } from './onboarding-parse';
 import { resumeExtract } from './resume-extract';
 import { vacancyParse } from './vacancy-parse';
+import { vacancyScore } from './vacancy-score';
 import type { PromptTemplate } from './template.types';
 
 /**
@@ -21,6 +22,7 @@ export const TEMPLATES = {
   onboarding_parse: onboardingParse,
   resume_extract: resumeExtract,
   vacancy_parse: vacancyParse,
+  vacancy_score: vacancyScore,
 } as const satisfies Record<string, PromptTemplate>;
 
 export type TemplateName = keyof typeof TEMPLATES;
@@ -49,3 +51,4 @@ export type { PromptTemplate, TemplateParams } from './template.types';
 export { ONBOARDING_FREE_TEXT } from './onboarding-parse';
 export { RESUME_TEXT } from './resume-extract';
 export { VACANCY_TEXT } from './vacancy-parse';
+export { VACANCY_SCORE_PROFILE, VACANCY_SCORE_RESUME, VACANCY_SCORE_VACANCY } from './vacancy-score';
