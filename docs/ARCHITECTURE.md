@@ -2,15 +2,21 @@
 
 What was decided and why, including the decisions that were reversed and what reversed them. Column-level detail is deliberately not here: `src/db/schema.ts` and the migrations under `drizzle/` are the source of truth for shape, and a second description of it would drift.
 
-The project was stopped at the end of its first iteration. This document says what exists and marks what does not, because a document that describes intentions in the present tense is how a reader ends up looking for code that was never written.
+The project was stopped at the end of its first iteration. Everything decided but not built is a checkbox under **TODO** rather than a paragraph in the present tense, which is how a reader ends up looking for code that was never written.
 
-## What is built, and what is not
+## What is built
 
-**Built:** sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
+Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
 
-**Not built:** vacancy intake, scoring, and the application tracker. Their tables exist and their modules are empty. Document tailoring was dropped from scope entirely.
+Document tailoring was dropped from scope entirely, and so is absent from the list below.
 
-The tables anticipating unbuilt features were kept rather than removed: dropping them would be a migration whose only benefit is tidiness, and the schema records the shape the design assumed.
+## TODO
+
+Decided, shaped for, and not built. Each is specified in the section named; the tables that anticipate them were kept rather than dropped, since removing them would be a migration whose only benefit is tidiness.
+
+- [ ] **Vacancy intake, scoring, the application tracker.** The tables exist; the modules are empty.
+- [ ] **The job queue** — *Execution model*. Postgres-backed, in the same database, with retries, delayed jobs and cron. Nothing in the repository depends on it yet.
+- [ ] **pgvector, a vector column, and retrieval over them** — *Retrieval and chat*. The database image can provide the extension; no migration enables it.
 
 ## Data model
 
@@ -51,7 +57,7 @@ Inference is not EU-resident. Verified rather than assumed: the first-party API 
 
 Everything built is a synchronous request handler. The rule for what should not be is written down: work that can fail partway and needs retries, is expensive to redo, or has to happen later belongs on a queue.
 
-A queue was chosen for that work — Postgres-backed, in the same database, with retries, delayed jobs and cron — and **it is not installed**. Nothing in the repository depends on it. The choice is recorded because the code was shaped around it: the units of work that would move take identifiers rather than content, so a handler becomes a job by being wrapped rather than rewritten, and a queued payload can never outlive the row it refers to.
+A queue was chosen for that work and is on the TODO list. The choice is recorded here because the code was already shaped around it: the units of work that would move take identifiers rather than content, so a handler becomes a job by being wrapped rather than rewritten, and a queued payload can never outlive the row it refers to.
 
 For anything long-lived the intended shape is a state machine on domain tables — a status column plus an append-only event timeline — with jobs as its timers, rather than a long-running process object.
 
@@ -101,16 +107,14 @@ What counts as mandatory, so that "tests are required" means something specific:
 
 One developer, so there is no rotation to name. What stands in for one: an automated pass over the change before it is proposed, on separate axes — conventions, architecture, requirements conformance — rather than one merged pass, because merged into a single pass the requirements check always loses. A human approves the diff itself, not a description of it. What blocks a merge is a failing gate, a convention from `CLAUDE.md`, or an unrecorded deviation from a decision here. Everything else is a comment.
 
-## Retrieval and chat — decided, not built
+## Retrieval and chat
 
-The first feature that would produce a vector, and the reason the retrieval rules below were settled in advance rather than invented under pressure.
+On the TODO list. The rules were settled in advance rather than invented under pressure, because chat is the first feature that would produce a vector and every one of these choices is expensive to reverse once vectors exist.
 
 - **Storage** would be a vector column in the same Postgres, not a second vector service.
 - **The corpus is the application's own rows** — extracted resumes, parsed vacancies, scores, applications and their events. Chunks derive from those, which means ownership and erasure need no separate treatment (a chunk descends from a row that already cascades) and staleness has a definition rather than a heuristic (a chunk is stale when its source row changed). Nothing outside the database is a source, and no ingestion path reads a filesystem.
 - **Ingestion is job-shaped** — chunking and embedding are slow and worth retrying — while query-time retrieval and generation stay synchronous, because someone is waiting for the answer.
 - **One embedding model across the system**, with the model version stored beside every vector, so a model change becomes an explicit "this vector is stale" flag rather than a silent decay in search quality. HNSW rather than IVFFlat: the latter needs training on data and behaves poorly on small, growing tables.
-
-None of this exists. The database image can provide the extension, but no migration enables it and no vector column is defined.
 
 ## Deliberately deferred
 

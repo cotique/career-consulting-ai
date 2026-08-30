@@ -14,11 +14,10 @@ Sign-in through Google, an onboarding profile with a free-text step the model
 parses, resume upload with structured extraction, account export and deletion,
 and the layer all of that runs on.
 
-Everything else the schema anticipates — vacancy intake, scoring, the
-application tracker — exists as tables and empty modules and no more, and
-document tailoring was dropped from scope entirely. The
-project was stopped at that point deliberately; see the architecture document
-for what was decided and what was left.
+The project was stopped there deliberately. Vacancy intake, scoring and the
+application tracker are decided and unbuilt — the [TODO
+list](docs/ARCHITECTURE.md#todo) says what each one still needs. Document
+tailoring was dropped from scope entirely.
 
 ## The parts worth reading
 
