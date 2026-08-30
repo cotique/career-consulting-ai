@@ -1,0 +1,14 @@
+-- T20. `pgboss.create_queue()` (installed by 0015) does real DDL — CREATE
+-- TABLE plus ATTACH PARTITION — and runs as its caller (no SECURITY DEFINER
+-- on the function, confirmed by reading node_modules/pg-boss/src/plans.js
+-- at 10.4.2), so `app_user` can never call it: it has no CREATE rights at
+-- all. Every queue this application ever uses is therefore provisioned
+-- here, once, through the admin connection — the same operational shape as
+-- adding a table. A new queue name later is a new migration, not a runtime
+-- call; see src/jobs/job-name.ts for the const union of provisioned names
+-- this migration must stay in sync with.
+--
+-- t20-smoke-test exists only for src/jobs/job-queue.spec.ts's proof-of-life
+-- tests — it has no product-facing caller. See docs/ARCHITECTURE.md's
+-- Execution model section for why nothing wraps a real handler yet.
+SELECT pgboss.create_queue('t20-smoke-test', '{}'::json);

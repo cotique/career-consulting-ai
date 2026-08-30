@@ -35,6 +35,11 @@ async function bootstrap() {
   // through the ingress, so exactly one hop is the truth here.
   app.set('trust proxy', 1);
 
+  // Without this, OnModuleDestroy (JobsModule's graceful pg-boss shutdown)
+  // never runs on SIGTERM — a container scale-down would kill in-flight job
+  // connections instead of draining them. Nothing needed it before T20.
+  app.enableShutdownHooks();
+
   // There is no UI in the MVP (SPEC §8) — Swagger is the interface the system is
   // actually driven from. But it is unauthenticated by nature: it hands anyone
   // who reaches it the full API surface. So it is opt-in per environment rather

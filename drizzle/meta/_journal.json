@@ -106,6 +106,34 @@
       "when": 1788092116944,
       "tag": "0014_vacancy_score_breakdown",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788107120663,
+      "tag": "0015_pgboss_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1788107639270,
+      "tag": "0016_pgboss_queues",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788107642330,
+      "tag": "0017_pgboss_app_user_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788110682372,
+      "tag": "0018_pgboss_revoke_execute",
+      "breakpoints": true
     }
   ]
 }

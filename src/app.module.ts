@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from './config/config.module';
 import { DbModule } from './db/db.module';
+import { JobsModule } from './jobs/jobs.module';
 import { LlmModule } from './llm/llm.module';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
@@ -20,6 +21,7 @@ import { WellbeingModule } from './wellbeing/wellbeing.module';
   imports: [
     ConfigModule,
     DbModule,
+    JobsModule,
     LlmModule,
     RateLimitModule,
     StorageModule,
