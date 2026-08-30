@@ -41,6 +41,20 @@ export async function extractText(content: Buffer, mimeType: string): Promise<st
   if (kind === 'txt') {
     text = content.toString('utf8');
   } else if (kind === 'pdf') {
+    // pdf-parse's bundled pdfjs-dist instantiates a DOMMatrix at module load
+    // time (src/display/canvas.js, unconditionally, even for text-only
+    // extraction) and only polyfills it itself on Node >=20.16/22.3 — this
+    // repo's pinned Node 20 can be older than that. Polyfilling here, once,
+    // before the module ever loads, is what stands in for a DOM on any Node
+    // 20.x. Path2D/ImageData are referenced only inside pdf.js's actual
+    // rendering paths, which text-only extraction never reaches, so they
+    // need no polyfill.
+    const globalWithDOMMatrix = globalThis as { DOMMatrix?: unknown };
+    if (typeof globalWithDOMMatrix.DOMMatrix === 'undefined') {
+      const { default: CSSMatrix } = await import('@thednp/dommatrix');
+      globalWithDOMMatrix.DOMMatrix = CSSMatrix;
+    }
+
     // Loaded lazily: these parsers are only needed when a file of that type
     // actually arrives, and both are heavier than the rest of the app.
     const { PDFParse } = await import('pdf-parse');
