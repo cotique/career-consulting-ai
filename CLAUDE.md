@@ -1,62 +1,58 @@
 # Working in this repository
 
 Conventions that are load-bearing here. Breaking one is a defect, not a style
-disagreement, so each says why.
+disagreement, so each carries the short version of why.
 
-`docs/ARCHITECTURE.md` holds the decisions and the reasoning; this file holds
-the rules that follow from them. Where the two overlap, the document is the
-source and this is the summary.
+`docs/ARCHITECTURE.md` is the decision record — what was chosen, what was
+rejected, what got reversed and by what. This file is the working set: the same
+rules stated as instructions, in a sentence each. When they disagree, the
+decision record wins; when you need the argument rather than the rule, it is
+there.
 
 ## The rules that matter most
 
-**Every provider SDK import lives in `src/llm/providers`.** Nothing else calls a
-model directly. Routing, spend limits, usage accounting and the untrusted-text
-convention all live behind that one entry point, so a call made around it
-silently escapes every one of them.
+**Every model call goes through `src/llm`; no provider SDK is imported anywhere
+else.** Routing, spend limits, metering and the untrusted-text convention all
+sit behind that door. Going round it loses every one of them silently.
 
 **Prompts are prose files behind a versioned registry**, never string literals
-at a call site. A caller names a template; the version comes from the registry.
-A fingerprint test fails if the text changes without a version bump, because
-comparing outputs across an unlabelled prompt change produces a conclusion
-about the world that is really a conclusion about the prompt.
+at a call site. Name a template and let the registry supply the version — the
+fingerprint test exists to stop text and version parting company.
 
-**Text from outside the system is untrusted**, including model output fed back
-in. It is rendered inside data delimiters by one path. A caller that can
-concatenate instructions with untrusted content eventually will.
+**Text from outside the system is untrusted**, and so is model output coming
+back. One path renders it, inside delimiters. Never hand-assemble a prompt from
+instructions plus untrusted content; a caller that *can* eventually will.
 
-**User-owned data is read through a user-scoped connection.** Row-level
-security is the layer that survives a forgotten `WHERE`, and it only applies
-when the request context is set. The application must never connect as a role
-that bypasses it.
+**User-owned data is read through a user-scoped connection.** The database
+enforcement only engages when the request context is set, so opening a
+connection any other way silently removes it.
 
 **Migrations are expand/contract and never reversible.** Add in one migration,
-switch code in the next release, drop later. Reversing a migration that dropped
-a column recreates it empty, so the "undo" is the step that loses the data. The
-property that protects a deploy is that the applied schema still works for the
-code that is still running.
+switch code in the next release, drop later. The applied schema must keep
+working for the code still running — that, and not a down script, is what makes
+a deploy survivable.
 
-**Bookkeeping does not share the caller's transaction.** Usage rows are written
-on their own connection: when they rode along with the caller, a failed call
-rolled back the record of money already spent, and the spend cap is computed
-from those rows.
+**Bookkeeping does not share the caller's transaction.** Usage rows go on their
+own connection, or a failed call erases the record of what it spent — and the
+spend cap is computed from those records.
 
 ## Tests
 
-See `docs/ARCHITECTURE.md`, section "Tests", for what counts as mandatory. The
-short version: anything touching user-owned data proves isolation against a
-real database, anything crossing a boundary is exercised through that boundary,
-every defect found by hand gets a regression test, and no test spends money.
+`docs/ARCHITECTURE.md` defines what counts as mandatory. In practice: prove
+isolation against a real database, drive boundaries through the boundary, add a
+regression test for anything found by hand, and never let a test reach a real
+provider.
 
-Run them with `npm test`. They need the local stand up (`docker compose up -d`)
-and migrations applied.
+Run them with `npm test`, with the local stand up and migrations applied.
 
 ## Before proposing a commit
 
-`npm run typecheck`, `npm run lint`, `npm test`. All three, every time. A commit
-is proposed for review, never made unilaterally.
+`npm run typecheck`, `npm run lint`, `npm test`. All three, every time. CI runs
+more than that — a build and a secret scan over the history — so a green local
+run is necessary rather than sufficient.
 
-Work happens on a branch off `develop`; the release branch is never committed to
-directly. See "Branching" in the architecture document for when it advances.
+A commit is proposed for review, never made unilaterally. Work happens on a
+branch off `develop`; the release branch is never committed to directly.
 
 ## Two habits worth keeping
 

@@ -12,7 +12,7 @@ import { BadRequestException } from '@nestjs/common';
  * The cost of that choice is real and worth stating: a text extractor reads a
  * two-column resume in the order the bytes happen to sit, not the order a human
  * reads them, so a heavily designed CV can come out interleaved. Claude accepts
- * PDFs natively and handles layout far better. Recorded in TRADEOFFS with the
+ * PDFs natively and handles layout far better. Left as it is, with the
  * trigger being exactly what you will notice first — extraction quality on a
  * real, designed resume.
  */

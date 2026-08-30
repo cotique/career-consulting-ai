@@ -1,6 +1,6 @@
 import type { UserContentBlock } from './types';
 
-// The prompt-injection convention (resolves the TRADEOFFS.md entry):
+// The prompt-injection convention (see "The LLM layer" in docs/ARCHITECTURE.md):
 // untrusted content is rendered inside explicit data delimiters with a
 // standing notice that it is data, not instructions. Callers never build
 // this framing themselves — they pass structured UserContentBlock[]s and
