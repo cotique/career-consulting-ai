@@ -99,6 +99,13 @@
       "when": 1788079643040,
       "tag": "0013_vacancy_paste_intake",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788092116944,
+      "tag": "0014_vacancy_score_breakdown",
+      "breakpoints": true
     }
   ]
 }

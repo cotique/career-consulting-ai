@@ -6,7 +6,7 @@ Everything decided but not built is a checkbox under **TODO** rather than a para
 
 ## What is built
 
-Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, vacancy intake by paste with structured parsing, account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
+Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, vacancy intake by paste with structured parsing, scoring a parsed vacancy against a profile and resume, account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
 
 Document tailoring was dropped from scope entirely, and so is absent from the list below.
 
@@ -14,7 +14,7 @@ Document tailoring was dropped from scope entirely, and so is absent from the li
 
 Decided, shaped for, and not built. Each is specified in the section named; the tables that anticipate them were kept rather than dropped, since removing them would be a migration whose only benefit is tidiness.
 
-- [ ] **Scoring and the application tracker.** The tables exist; the modules are empty.
+- [ ] **The application tracker.** The table exists; the module is empty.
 - [ ] **The job queue** — *Execution model*. Postgres-backed, in the same database, with retries, delayed jobs and cron. Nothing in the repository depends on it yet.
 - [ ] **pgvector, a vector column, and retrieval over them** — *Retrieval and chat*. The database image can provide the extension; no migration enables it.
 
@@ -53,7 +53,7 @@ Deletion and export were built in the first release rather than retrofitted. Del
 
 Inference is not EU-resident. Verified rather than assumed: the first-party API offers no EU routing value on any model, and the provider surface that does would be a second implementation behind the same interface — which is what the abstraction is for. For a single operator processing their own data this is a documentation gap; it would not be for anyone else.
 
-## Vacancy intake
+## Vacancy intake and scoring
 
 A posting is pasted as text. Nothing is fetched and no link is followed — a `source_url` is kept as a note. Storing the text is free and parsing it is a separate, rate-limited call, because parsing is the step that spends money while pasting is the step someone does twenty times in an evening.
 
@@ -66,6 +66,12 @@ The consequence at intake: a posting outside the supported European markets is s
 **Deduplication is exact-match only** — a normalised hash of the pasted text, deliberately not unique, so a repeat is routed to the row that already holds it instead of being refused. Recognising the same posting copied from another board, or the same role behind an agency and its client, needs a derived identity key whose accuracy is unmeasured and a volume of postings that manual pasting does not produce. A wrong link is invisible exactly where it does damage, so both wait for the volume that would let them be measured.
 
 **Whether a posting comes through an intermediary is extracted as a hypothesis carrying its evidence**, never as a verdict. Being submitted through an agency commonly forecloses applying to the employer directly, so it is worth settling before applying rather than discovering afterwards — which is also why a confident wrong answer here is expensive. The undecided answer is a first-class value, and the quoted words any answer rests on are stored beside it.
+
+**Scoring produces two analyses under opposite rules, not one.** `presentable` is what genuinely attracted the candidate and what she can offer — compensation, work mode, stack match and benefits are excluded, because those are reasons to accept an offer, not reasons that would persuade an employer. `tradeoff` is the private, two-sided view for her own decision — the same four fields are required there, since leaving them out would make the decision blind. One model call produces both, kept structurally separate; a real vacancy that leaks an excluded field into `presentable` is the failure the primary test checks for.
+
+Scoring re-surfaces the same market-scope blocker computed at intake rather than inventing a second blocker vocabulary — nothing yet needs a blocker that only scoring, not intake, could know about.
+
+Each score is inserted as a new row rather than overwriting the last one — a snapshot of that model, that prompt version, against the profile and resume as they stood at that moment. It is not recomputed when the profile or resume changes later, which means a stale score can sit next to a profile it no longer reflects. *Revisit when re-scoring on profile change is worth the calls it would spend — most likely once the profile starts changing often enough for staleness to be the more visible problem.*
 
 ## Execution model
 
@@ -149,7 +155,8 @@ The code and tests cite these in comments and test names. This is an index, not 
 | **FR1** | sign-in through an external provider, no self-managed passwords | Data model, and `src/auth` |
 | **FR4** | resume upload | Data model — the raw/structured split |
 | **FR5** | export and deletion in one action | Personal data |
-| **FR6** | vacancies pasted as text, parsed into structure | Vacancy intake |
+| **FR6** | vacancies pasted as text, parsed into structure | Vacancy intake and scoring |
+| **FR7** | a parsed vacancy scored against a profile and resume | Vacancy intake and scoring |
 | **FR21** | onboarding is step-addressable | cited by the code as the reason for a payload shape; the step itself was never built |
 | **NFR1** | every model call is metered | The LLM layer |
 | **NFR2** | spend capped per attempt, per conversation, per month | The LLM layer |
@@ -158,5 +165,5 @@ The code and tests cite these in comments and test names. This is an index, not 
 | **NFR5** | user-scoped connection with row-level security beneath it | Data model |
 | **NFR6** | deletion and export from the first release | Personal data |
 | **NFR11** | one entry point for model calls | The LLM layer |
-| **NFR15** | European markets only at launch, marked rather than silently dropped | Vacancy intake |
+| **NFR15** | European markets only at launch, marked rather than silently dropped | Vacancy intake and scoring |
 | **NFR16** | no recovery mechanism outlives a deletion request | Personal data |

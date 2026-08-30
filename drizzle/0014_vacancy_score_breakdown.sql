@@ -1,0 +1,1 @@
+ALTER TABLE "vacancy_scores" ADD COLUMN "breakdown" jsonb;
