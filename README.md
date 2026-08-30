@@ -11,11 +11,11 @@ Apps through a manually triggered pipeline.
 ## What is built
 
 Sign-in through Google, an onboarding profile with a free-text step the model
-parses, resume upload with structured extraction, account export and deletion,
-and the layer all of that runs on.
+parses, resume upload with structured extraction, vacancy intake by paste with
+structured parsing, account export and deletion, and the layer all of that runs
+on.
 
-The project was stopped there deliberately. Vacancy intake, scoring and the
-application tracker are decided and unbuilt — the [TODO
+Scoring and the application tracker are decided and unbuilt — the [TODO
 list](docs/ARCHITECTURE.md#todo) says what each one still needs. Document
 tailoring was dropped from scope entirely.
 

@@ -150,23 +150,45 @@ export const resumeExtractions = pgTable('resume_extractions', {
 
 // --- Vacancies and scoring ---------------------------------------------
 
-export const vacancies = pgTable('vacancies', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  sourceType: vacancySourceTypeEnum('source_type').notNull(),
-  sourceUrl: text('source_url'),
-  rawText: text('raw_text').notNull(),
-  structuredJson: jsonb('structured_json'),
-  companyName: text('company_name'),
-  title: text('title'),
-  // ISO 3166-1 alpha-2. Market-specific behavior (CV conventions, language,
-  // legal norms) keys off this rather than parsing free-text locations.
-  countryCode: text('country_code'),
-  tenantId: uuid('tenant_id'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const vacancies = pgTable(
+  'vacancies',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    sourceType: vacancySourceTypeEnum('source_type').notNull(),
+    sourceUrl: text('source_url'),
+    rawText: text('raw_text').notNull(),
+    // Normalised sha-256 of `raw_text` (T16). Deliberately NOT unique: the same
+    // posting pasted twice is routed to the row that already exists, and a
+    // unique constraint would turn that into an error the caller has to
+    // interpret. Nullable because rows predating this column have no hash and
+    // must keep working — expand/contract.
+    rawTextHash: text('raw_text_hash'),
+    structuredJson: jsonb('structured_json'),
+    // Which prompt produced `structured_json`. Same convention, and the same
+    // reason, as `resume_extractions.prompt_version`: a structure whose prompt
+    // version is unknown cannot take part in a self-audit comparison. Null
+    // until the vacancy has been parsed.
+    parsePromptVersion: text('parse_prompt_version'),
+    companyName: text('company_name'),
+    title: text('title'),
+    // ISO 3166-1 alpha-2. Market-specific behavior (CV conventions, language,
+    // legal norms) keys off this rather than parsing free-text locations.
+    countryCode: text('country_code'),
+    tenantId: uuid('tenant_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    // The duplicate lookup on paste is always "this user, this hash" — the
+    // owner column leads because every query carries it and RLS filters on it.
+    userRawTextHashIdx: index('vacancies_user_id_raw_text_hash_idx').on(
+      table.userId,
+      table.rawTextHash,
+    ),
+  }),
+);
 
 export const vacancyScores = pgTable('vacancy_scores', {
   id: uuid('id').primaryKey().defaultRandom(),
