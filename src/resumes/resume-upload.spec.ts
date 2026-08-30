@@ -132,7 +132,23 @@ describe('upload validation (FR4)', () => {
   });
 });
 
+// A minimal, hand-built single-page PDF ("Resume extraction fixture" in
+// 24pt Helvetica) — no test anywhere in this suite previously ran a real PDF
+// through pdf-parse; every other PDF fixture is random bytes or oversized
+// garbage that never reaches the actual parser. That gap is exactly why a
+// real crash (pdf-parse's bundled pdfjs-dist instantiating a DOMMatrix at
+// module load time, unpolyfilled on this repo's pinned Node 20) went
+// unnoticed until a real upload hit it.
+const MINIMAL_PDF_BASE64 =
+  'JVBERi0xLjQKMSAwIG9iaiA8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4gZW5kb2JqCjIgMCBvYmogPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4gZW5kb2JqCjMgMCBvYmogPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvTWVkaWFCb3ggWzAgMCAzMDAgMTQ0XSAvQ29udGVudHMgNSAwIFIgPj4gZW5kb2JqCjQgMCBvYmogPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+IGVuZG9iago1IDAgb2JqIDw8IC9MZW5ndGggNTYgPj4Kc3RyZWFtCkJUIC9GMSAyNCBUZiAyMCAxMDAgVGQgKFJlc3VtZSBleHRyYWN0aW9uIGZpeHR1cmUpIFRqIEVUCmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzMTEgMDAwMDAgbiAKdHJhaWxlciA8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo0MTcKJSVFT0Y=';
+
 describe('text extraction', () => {
+  it('extracts real text from an actual PDF, not just random or oversized bytes', async () => {
+    const pdf = Buffer.from(MINIMAL_PDF_BASE64, 'base64');
+    const text = await extractText(pdf, 'application/pdf');
+    expect(text).toContain('Resume extraction fixture');
+  });
+
   it('reads plain text and normalizes line endings', async () => {
     const text = await extractText(Buffer.from('Line one\r\nLine two\r\n'), 'text/plain');
     // CRLF is normalized because the same resume uploaded from Windows and from
