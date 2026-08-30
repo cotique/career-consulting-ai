@@ -92,6 +92,13 @@
       "when": 1786391434023,
       "tag": "0012_extraction_prompt_version",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788079643040,
+      "tag": "0013_vacancy_paste_intake",
+      "breakpoints": true
     }
   ]
 }

@@ -23,6 +23,10 @@ const PINNED: Record<string, { version: string; sha256: string }> = {
     version: 'resume-extract-v1',
     sha256: '5626e6e833d81986d37b577a8fdf5cc6bee409a727e6b8bc60fd868d992f00ce',
   },
+  vacancy_parse: {
+    version: 'vacancy-parse-v1',
+    sha256: 'a124353142c61e7adac59a5c8f0f3fc8438354e6a8486135a72b99580b358807',
+  },
 };
 
 /**

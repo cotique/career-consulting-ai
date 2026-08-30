@@ -1,6 +1,7 @@
 import { loadTemplateText } from './load-text';
 import { onboardingParse } from './onboarding-parse';
 import { resumeExtract } from './resume-extract';
+import { vacancyParse } from './vacancy-parse';
 import type { PromptTemplate } from './template.types';
 
 /**
@@ -19,6 +20,7 @@ import type { PromptTemplate } from './template.types';
 export const TEMPLATES = {
   onboarding_parse: onboardingParse,
   resume_extract: resumeExtract,
+  vacancy_parse: vacancyParse,
 } as const satisfies Record<string, PromptTemplate>;
 
 export type TemplateName = keyof typeof TEMPLATES;
@@ -46,3 +48,4 @@ export function assertTemplateTextAvailable(): void {
 export type { PromptTemplate, TemplateParams } from './template.types';
 export { ONBOARDING_FREE_TEXT } from './onboarding-parse';
 export { RESUME_TEXT } from './resume-extract';
+export { VACANCY_TEXT } from './vacancy-parse';

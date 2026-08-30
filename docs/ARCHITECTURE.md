@@ -2,11 +2,11 @@
 
 What was decided and why, including the decisions that were reversed and what reversed them. Column-level detail is deliberately not here: `src/db/schema.ts` and the migrations under `drizzle/` are the source of truth for shape, and a second description of it would drift.
 
-The project was stopped at the end of its first iteration. Everything decided but not built is a checkbox under **TODO** rather than a paragraph in the present tense, which is how a reader ends up looking for code that was never written.
+Everything decided but not built is a checkbox under **TODO** rather than a paragraph in the present tense, which is how a reader ends up looking for code that was never written.
 
 ## What is built
 
-Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
+Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, vacancy intake by paste with structured parsing, account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
 
 Document tailoring was dropped from scope entirely, and so is absent from the list below.
 
@@ -14,7 +14,7 @@ Document tailoring was dropped from scope entirely, and so is absent from the li
 
 Decided, shaped for, and not built. Each is specified in the section named; the tables that anticipate them were kept rather than dropped, since removing them would be a migration whose only benefit is tidiness.
 
-- [ ] **Vacancy intake, scoring, the application tracker.** The tables exist; the modules are empty.
+- [ ] **Scoring and the application tracker.** The tables exist; the modules are empty.
 - [ ] **The job queue** — *Execution model*. Postgres-backed, in the same database, with retries, delayed jobs and cron. Nothing in the repository depends on it yet.
 - [ ] **pgvector, a vector column, and retrieval over them** — *Retrieval and chat*. The database image can provide the extension; no migration enables it.
 
@@ -52,6 +52,20 @@ Deletion and export were built in the first release rather than retrofitted. Del
 - **A typed failure taxonomy** — retryable, permanent, spend-related — shaped for whoever must act on it, and mapped to HTTP in one place by kind rather than by class, so a new failure type arrives already handled.
 
 Inference is not EU-resident. Verified rather than assumed: the first-party API offers no EU routing value on any model, and the provider surface that does would be a second implementation behind the same interface — which is what the abstraction is for. For a single operator processing their own data this is a documentation gap; it would not be for anyone else.
+
+## Vacancy intake
+
+A posting is pasted as text. Nothing is fetched and no link is followed — a `source_url` is kept as a note. Storing the text is free and parsing it is a separate, rate-limited call, because parsing is the step that spends money while pasting is the step someone does twenty times in an evening.
+
+**Nothing found is hidden by deleting it.** The line intake draws is between a *blocker*, which is about possibility — a market outside the supported scope, a requirement that cannot be met — and a *minus*, which is about preference: pay, format, stack. A blocked vacancy is written as a row with its reason readable, and is only absent from the default list; a flag returns it.
+
+The reason is not caution for its own sake. A profile is an approximation of preferences the person has **not finished discovering** — a domain they did not know interested them will outweigh both the band and the location, and it is not in the profile because it could not have been. Filtering hard against the profile filters against yesterday's version of the person. The classification is itself fallible, which is the other half of why it has to stay readable.
+
+The consequence at intake: a posting outside the supported European markets is stored and marked rather than refused, so NFR15 becomes visible rather than silent.
+
+**Deduplication is exact-match only** — a normalised hash of the pasted text, deliberately not unique, so a repeat is routed to the row that already holds it instead of being refused. Recognising the same posting copied from another board, or the same role behind an agency and its client, needs a derived identity key whose accuracy is unmeasured and a volume of postings that manual pasting does not produce. A wrong link is invisible exactly where it does damage, so both wait for the volume that would let them be measured.
+
+**Whether a posting comes through an intermediary is extracted as a hypothesis carrying its evidence**, never as a verdict. Being submitted through an agency commonly forecloses applying to the employer directly, so it is worth settling before applying rather than discovering afterwards — which is also why a confident wrong answer here is expensive. The undecided answer is a first-class value, and the quoted words any answer rests on are stored beside it.
 
 ## Execution model
 
@@ -135,6 +149,7 @@ The code and tests cite these in comments and test names. This is an index, not 
 | **FR1** | sign-in through an external provider, no self-managed passwords | Data model, and `src/auth` |
 | **FR4** | resume upload | Data model — the raw/structured split |
 | **FR5** | export and deletion in one action | Personal data |
+| **FR6** | vacancies pasted as text, parsed into structure | Vacancy intake |
 | **FR21** | onboarding is step-addressable | cited by the code as the reason for a payload shape; the step itself was never built |
 | **NFR1** | every model call is metered | The LLM layer |
 | **NFR2** | spend capped per attempt, per conversation, per month | The LLM layer |
@@ -143,4 +158,5 @@ The code and tests cite these in comments and test names. This is an index, not 
 | **NFR5** | user-scoped connection with row-level security beneath it | Data model |
 | **NFR6** | deletion and export from the first release | Personal data |
 | **NFR11** | one entry point for model calls | The LLM layer |
+| **NFR15** | European markets only at launch, marked rather than silently dropped | Vacancy intake |
 | **NFR16** | no recovery mechanism outlives a deletion request | Personal data |
