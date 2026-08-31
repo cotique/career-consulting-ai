@@ -6,7 +6,7 @@ Everything decided but not built is a checkbox under **TODO** rather than a para
 
 ## What is built
 
-Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, vacancy intake by paste with structured parsing, scoring a parsed vacancy against a profile and resume, account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
+Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, vacancy intake by paste with structured parsing, scoring a parsed vacancy against a profile and resume, a Postgres-backed job queue, account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
 
 Document tailoring was dropped from scope entirely, and so is absent from the list below.
 
@@ -15,7 +15,6 @@ Document tailoring was dropped from scope entirely, and so is absent from the li
 Decided, shaped for, and not built. Each is specified in the section named; the tables that anticipate them were kept rather than dropped, since removing them would be a migration whose only benefit is tidiness.
 
 - [ ] **The application tracker.** The table exists; the module is empty.
-- [ ] **The job queue** — *Execution model*. Postgres-backed, in the same database, with retries, delayed jobs and cron. Nothing in the repository depends on it yet.
 - [ ] **pgvector, a vector column, and retrieval over them** — *Retrieval and chat*. The database image can provide the extension; no migration enables it.
 
 ## Data model
@@ -23,7 +22,7 @@ Decided, shaped for, and not built. Each is specified in the section named; the 
 The rules that shaped the schema, as opposed to its contents:
 
 - **Every user-owned row carries `user_id` directly**, including child tables that could reach it through a join. Row-level security policies that join do not compose and degrade as the graph deepens, so the column is denormalised on purpose.
-- **Row-level security is forced on every table**, keyed off `app.current_user_id` set per request inside a transaction. It is the layer that survives a forgotten `WHERE`, and it applies only if the application connects as a role that cannot bypass it — a database-level property, not a code convention.
+- **Row-level security is forced on every table**, keyed off `app.current_user_id` set per request inside a transaction. It is the layer that survives a forgotten `WHERE`, and it applies only if the application connects as a role that cannot bypass it — a database-level property, not a code convention. This is about domain tables specifically: `pgboss.*` (T20) is operational infrastructure with no per-user session — pg-boss's own polling never sets `app.current_user_id` — so it carries no RLS policy at all, by design rather than oversight.
 - **Generated content carries who owns it, who produced it and whether it was approved** as three separate columns. Ownership is what security keys off; authorship and state are product facts. Conflating them means a reviewer cannot be distinguished from an author later without a migration.
 - **A raw/structured split for anything arriving as a file**: bytes in object storage, extracted structure in the database, a pointer between them. That is what allows the raw thing to be deleted later without losing function.
 - **Every migration must be safe to have applied while the previous version of the code is still running.** Add a column in one migration, switch the code in the release after, drop the old shape later. A rename is an add, a backfill and a later drop, never a rename.
@@ -75,9 +74,15 @@ Each score is inserted as a new row rather than overwriting the last one — a s
 
 ## Execution model
 
-Everything built is a synchronous request handler. The rule for what should not be is written down: work that can fail partway and needs retries, is expensive to redo, or has to happen later belongs on a queue.
+Most of what's built is a synchronous request handler. The rule for what should not be is written down: work that can fail partway and needs retries, is expensive to redo, or has to happen later belongs on a queue.
 
-A queue was chosen for that work and is on the TODO list. The choice is recorded here because the code was already shaped around it: the units of work that would move take identifiers rather than content, so a handler becomes a job by being wrapped rather than rewritten, and a queued payload can never outlive the row it refers to.
+**pg-boss (T20)** is that queue — Postgres-backed, its own `pgboss` schema in the same database, no separate service. It runs in-process, inside the same app that serves HTTP: this repo deploys one image to one Container App, and a separate worker process would be new CI, new deploy wiring and new secret access for a project with no queue depth yet. The units of work that would move take identifiers rather than content (NFR7), so a handler becomes a job by being wrapped rather than rewritten, and a queued payload can never outlive the row it refers to.
+
+The one real cost of running in-process, worth stating rather than discovering later: under scale-to-zero, pg-boss's poller and delayed-job wake-ups only run while the container is warm — a delayed job due while nobody's hitting the app waits for the next request. Nothing depends on precise timing today; revisit if something ever does.
+
+`pgboss.create_queue()` does real DDL (a `CREATE TABLE`/`ATTACH PARTITION` per queue) and runs as its caller, and `app_user` has no CREATE rights — so every queue name is provisioned once, by migration, through the admin connection, exactly like a table; the runtime app only ever calls `send`/`work`/`schedule` against a queue that already exists. `app_user`'s default PUBLIC execute grant on `create_queue`/`delete_queue` is explicitly revoked, so the missing invariant is "cannot call it" rather than "calling it happens to fail" — the difference matters the day something else grants `CREATE` on the schema for an unrelated reason. Nothing wraps a real handler as a job yet — `parseVacancy` and `scoreVacancy` stay synchronous forever for their existing callers, someone waiting on the answer; the first real consumer arrives with the application tracker or retrieval's ingestion job, whichever lands first.
+
+Cron delivery itself is not wired up: pg-boss's own cron engine is disabled (it would otherwise call `create_queue` on its own internal relay queue at every boot, the exact runtime DDL call the paragraph above rules out, for a queue this repo never provisioned a partition for). `schedule()` records a row; nothing currently reads it. Revisit together, once something needs real cron: provision that internal queue by migration, then turn the engine back on.
 
 For anything long-lived the intended shape is a state machine on domain tables — a status column plus an append-only event timeline — with jobs as its timers, rather than a long-running process object.
 
@@ -164,6 +169,7 @@ The code and tests cite these in comments and test names. This is an index, not 
 | **NFR4** | files reachable only through an authenticated endpoint | Personal data |
 | **NFR5** | user-scoped connection with row-level security beneath it | Data model |
 | **NFR6** | deletion and export from the first release | Personal data |
+| **NFR7** | queued work carries identifiers, never content | Execution model |
 | **NFR11** | one entry point for model calls | The LLM layer |
 | **NFR15** | European markets only at launch, marked rather than silently dropped | Vacancy intake and scoring |
 | **NFR16** | no recovery mechanism outlives a deletion request | Personal data |
