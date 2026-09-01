@@ -1,4 +1,9 @@
 import { Module } from '@nestjs/common';
+import { TrackerController } from './tracker.controller';
+import { TrackerService } from './tracker.service';
 
-@Module({})
+@Module({
+  controllers: [TrackerController],
+  providers: [TrackerService],
+})
 export class TrackerModule {}

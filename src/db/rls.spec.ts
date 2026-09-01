@@ -97,6 +97,7 @@ describe('Row-Level Security', () => {
     'vacancy_scores',
     'tailored_documents',
     'application_events',
+    'applications',
   ])('%s: direct user_id policy hides another user\'s rows', async (table) => {
     const client = await appPool.connect();
     try {

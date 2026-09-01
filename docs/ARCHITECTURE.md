@@ -6,7 +6,7 @@ Everything decided but not built is a checkbox under **TODO** rather than a para
 
 ## What is built
 
-Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, vacancy intake by paste with structured parsing, scoring a parsed vacancy against a profile and resume, a Postgres-backed job queue, account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
+Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, vacancy intake by paste with structured parsing, scoring a parsed vacancy against a profile and resume, a Postgres-backed job queue, an application tracker with a follow-up reminder, account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
 
 Document tailoring was dropped from scope entirely, and so is absent from the list below.
 
@@ -14,7 +14,6 @@ Document tailoring was dropped from scope entirely, and so is absent from the li
 
 Decided, shaped for, and not built. Each is specified in the section named; the tables that anticipate them were kept rather than dropped, since removing them would be a migration whose only benefit is tidiness.
 
-- [ ] **The application tracker.** The table exists; the module is empty.
 - [ ] **pgvector, a vector column, and retrieval over them** — *Retrieval and chat*. The database image can provide the extension; no migration enables it.
 
 ## Data model
@@ -80,11 +79,13 @@ Most of what's built is a synchronous request handler. The rule for what should 
 
 The one real cost of running in-process, worth stating rather than discovering later: under scale-to-zero, pg-boss's poller and delayed-job wake-ups only run while the container is warm — a delayed job due while nobody's hitting the app waits for the next request. Nothing depends on precise timing today; revisit if something ever does.
 
-`pgboss.create_queue()` does real DDL (a `CREATE TABLE`/`ATTACH PARTITION` per queue) and runs as its caller, and `app_user` has no CREATE rights — so every queue name is provisioned once, by migration, through the admin connection, exactly like a table; the runtime app only ever calls `send`/`work`/`schedule` against a queue that already exists. `app_user`'s default PUBLIC execute grant on `create_queue`/`delete_queue` is explicitly revoked, so the missing invariant is "cannot call it" rather than "calling it happens to fail" — the difference matters the day something else grants `CREATE` on the schema for an unrelated reason. Nothing wraps a real handler as a job yet — `parseVacancy` and `scoreVacancy` stay synchronous forever for their existing callers, someone waiting on the answer; the first real consumer arrives with the application tracker or retrieval's ingestion job, whichever lands first.
+`pgboss.create_queue()` does real DDL (a `CREATE TABLE`/`ATTACH PARTITION` per queue) and runs as its caller, and `app_user` has no CREATE rights — so every queue name is provisioned once, by migration, through the admin connection, exactly like a table; the runtime app only ever calls `send`/`work`/`schedule` against a queue that already exists. `app_user`'s default PUBLIC execute grant on `create_queue`/`delete_queue` is explicitly revoked, so the missing invariant is "cannot call it" rather than "calling it happens to fail" — the difference matters the day something else grants `CREATE` on the schema for an unrelated reason. `parseVacancy` and `scoreVacancy` stay synchronous forever for their existing callers, someone waiting on the answer — they are not job handlers, and pg-boss's first real consumer is the application tracker, described below.
 
 Cron delivery itself is not wired up: pg-boss's own cron engine is disabled (it would otherwise call `create_queue` on its own internal relay queue at every boot, the exact runtime DDL call the paragraph above rules out, for a queue this repo never provisioned a partition for). `schedule()` records a row; nothing currently reads it. Revisit together, once something needs real cron: provision that internal queue by migration, then turn the engine back on.
 
 For anything long-lived the intended shape is a state machine on domain tables — a status column plus an append-only event timeline — with jobs as its timers, rather than a long-running process object.
+
+**The application tracker (T21)** is the first thing to actually be that shape, and pg-boss's first real consumer: `applications.status` plus an append-only `application_events` timeline, with a delayed job as the one timer — a follow-up reminder enqueued when an application reaches `applied`, firing 14 days later if nothing else happened first. A later status change does not cancel that job (there is no cancel-by-key mechanism), so a stale reminder can fire after the application has already moved on; its handler checks the current status and writes nothing if it no longer applies. Accepted as-is — the alternative is tracking a job id per application solely to cancel it, for a reminder that is otherwise harmless to skip.
 
 ## Hosting
 
@@ -163,6 +164,7 @@ The code and tests cite these in comments and test names. This is an index, not 
 | **FR6** | vacancies pasted as text, parsed into structure | Vacancy intake and scoring |
 | **FR7** | a parsed vacancy scored against a profile and resume | Vacancy intake and scoring |
 | **FR21** | onboarding is step-addressable | cited by the code as the reason for a payload shape; the step itself was never built |
+| **FR22** | an application is tracked through its lifecycle, with a follow-up reminder if it goes quiet | Execution model, `src/tracker` |
 | **NFR1** | every model call is metered | The LLM layer |
 | **NFR2** | spend capped per attempt, per conversation, per month | The LLM layer |
 | **NFR3** | secrets from a managed store through one path | Hosting |
