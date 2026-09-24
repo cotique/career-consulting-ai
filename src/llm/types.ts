@@ -7,6 +7,7 @@ export const TASK_TYPES = [
   'resume_extraction',
   'tailoring',
   'onboarding_parsing',
+  'chat',
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
@@ -116,7 +117,15 @@ export class LlmTruncatedError extends LlmError {
   }
 }
 
-/** Conversation turn cap tripped (retro-audit 4.2). */
+/**
+ * Conversation turn cap tripped (retro-audit 4.2). `budget`, not `permanent`:
+ * unlike a malformed request, this refusal is on purpose and starting a new
+ * conversation succeeds immediately — the same "refused now, not forever"
+ * shape `BudgetExceededError` already has, and `httpErrorFor` already maps
+ * `budget` to 429 for exactly that reason. Chat (T19) is this error's first
+ * real caller; the kind was `permanent` (a wrong, unexercised default) until
+ * that mattered.
+ */
 export class ConversationLimitError extends LlmError {
   constructor(
     readonly conversationId: string,
@@ -124,7 +133,7 @@ export class ConversationLimitError extends LlmError {
     readonly maxTurns: number,
   ) {
     super(
-      'permanent',
+      'budget',
       `Conversation ${conversationId} has reached its ${maxTurns}-turn limit (${turns} turns used).`,
     );
     this.name = 'ConversationLimitError';

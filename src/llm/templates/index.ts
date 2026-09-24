@@ -1,4 +1,5 @@
 import { loadTemplateText } from './load-text';
+import { chat } from './chat';
 import { onboardingParse } from './onboarding-parse';
 import { resumeExtract } from './resume-extract';
 import { vacancyParse } from './vacancy-parse';
@@ -23,6 +24,7 @@ export const TEMPLATES = {
   resume_extract: resumeExtract,
   vacancy_parse: vacancyParse,
   vacancy_score: vacancyScore,
+  chat,
 } as const satisfies Record<string, PromptTemplate>;
 
 export type TemplateName = keyof typeof TEMPLATES;
@@ -52,3 +54,4 @@ export { ONBOARDING_FREE_TEXT } from './onboarding-parse';
 export { RESUME_TEXT } from './resume-extract';
 export { VACANCY_TEXT } from './vacancy-parse';
 export { VACANCY_SCORE_PROFILE, VACANCY_SCORE_RESUME, VACANCY_SCORE_VACANCY } from './vacancy-score';
+export { CHAT_RETRIEVED_CONTEXT, CHAT_HISTORY, CHAT_MESSAGE } from './chat';

@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import type { Pool } from 'pg';
 import { PG_POOL } from '../db/db.module';
@@ -32,7 +32,7 @@ function toVectorLiteral(vector: number[]): string {
 }
 
 @Injectable()
-export class RetrievalService implements OnModuleInit {
+export class RetrievalService implements OnApplicationBootstrap {
   private readonly logger = new Logger(RetrievalService.name);
 
   constructor(
@@ -46,8 +46,16 @@ export class RetrievalService implements OnModuleInit {
    * Registered once, here, for the app's lifetime — see tracker.service.ts's
    * own comment on why calling `registerHandler` twice against one queue is
    * a real, previously-hit race, not a hypothetical.
+   *
+   * `onApplicationBootstrap`, not `onModuleInit`: Nest only guarantees the
+   * latter runs before *this module's own* dependencies finish, not before
+   * every other module's — JobsModule happened to init first while nothing
+   * else imported RetrievalModule, and stopped once chat (T19) did, since
+   * that added a real edge to the module graph. `onApplicationBootstrap`
+   * is the one hook Nest runs only after every module's `onModuleInit` has
+   * completed, regardless of import shape — the actual guarantee this needs.
    */
-  async onModuleInit(): Promise<void> {
+  async onApplicationBootstrap(): Promise<void> {
     await this.jobQueue.registerHandler<ReindexJobPayload>(JOB_NAMES.RETRIEVAL_REINDEX, (job) =>
       this.runReindex(job.data.userId),
     );
