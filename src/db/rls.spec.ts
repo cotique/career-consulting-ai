@@ -28,12 +28,15 @@ describe('Row-Level Security', () => {
     await adminDb
       .insert(schema.resumes)
       .values({ userId: userB, blobStoragePath: 'blob://b.pdf', mimeType: 'application/pdf' });
-    await adminDb.insert(schema.resumeExtractions).values({
-      userId: userA,
-      resumeId: resumeA.id,
-      structuredJson: {},
-      modelUsed: 'test-model',
-    });
+    const [resumeExtractionA] = await adminDb
+      .insert(schema.resumeExtractions)
+      .values({
+        userId: userA,
+        resumeId: resumeA.id,
+        structuredJson: {},
+        modelUsed: 'test-model',
+      })
+      .returning();
 
     // One row per remaining child table, all owned by userA — the direct-policy
     // tests below assert userB sees none of them.
@@ -41,6 +44,20 @@ describe('Row-Level Security', () => {
       .insert(schema.vacancies)
       .values({ userId: userA, sourceType: 'paste', rawText: 'a vacancy', countryCode: 'PL' })
       .returning();
+    await adminDb.insert(schema.resumeExtractionChunks).values({
+      userId: userA,
+      resumeExtractionId: resumeExtractionA.id,
+      content: 'chunk text',
+      contentHash: 'hash',
+      embeddingModel: 'test-model',
+    });
+    await adminDb.insert(schema.vacancyChunks).values({
+      userId: userA,
+      vacancyId: vacancyA.id,
+      content: 'chunk text',
+      contentHash: 'hash',
+      embeddingModel: 'test-model',
+    });
     await adminDb.insert(schema.vacancyScores).values({
       userId: userA,
       vacancyId: vacancyA.id,
@@ -98,6 +115,8 @@ describe('Row-Level Security', () => {
     'tailored_documents',
     'application_events',
     'applications',
+    'resume_extraction_chunks',
+    'vacancy_chunks',
   ])('%s: direct user_id policy hides another user\'s rows', async (table) => {
     const client = await appPool.connect();
     try {

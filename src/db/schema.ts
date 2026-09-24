@@ -11,6 +11,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  vector,
 } from 'drizzle-orm/pg-core';
 
 // Enums — this file is the source of truth for allowed values; the rules they
@@ -304,5 +305,85 @@ export const llmUsageLogs = pgTable(
     conversationIdx: index('llm_usage_logs_conversation_id_idx')
       .on(table.conversationId)
       .where(sql`${table.conversationId} IS NOT NULL`),
+  }),
+);
+
+// --- Retrieval -------------------------------------------------------------
+
+// No polymorphic `chunks` table: "Retrieval and chat" (docs/ARCHITECTURE.md)
+// requires erasure to need no separate treatment because a chunk descends
+// from a row that already cascades — that only holds with a real
+// `ON DELETE CASCADE` FK to the specific source row, which a shared
+// source_type/source_id pair could not carry. One table per source instead,
+// same as every other relationship in this file.
+export const resumeExtractionChunks = pgTable(
+  'resume_extraction_chunks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    resumeExtractionId: uuid('resume_extraction_id')
+      .notNull()
+      .references(() => resumeExtractions.id, { onDelete: 'cascade' }),
+    // Always 0 today — one row renders to one chunk. The column and its
+    // uniqueness below exist so real sliding-window splitting of a long
+    // source is a data change later, not a schema migration.
+    chunkIndex: integer('chunk_index').notNull().default(0),
+    content: text('content').notNull(),
+    // Detects "the source row changed" (docs/ARCHITECTURE.md's definition of
+    // stale) without re-embedding to find out — a reindex skips a row whose
+    // current hash still matches this.
+    contentHash: text('content_hash').notNull(),
+    embedding: vector('embedding', { dimensions: 1536 }),
+    // Stored beside the vector, not inferred from anywhere else — a model
+    // change becomes an explicit stale flag rather than silent decay.
+    embeddingModel: text('embedding_model').notNull(),
+    tenantId: uuid('tenant_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    // Also what makes the reindex job's upsert idempotent under pg-boss's
+    // at-least-once delivery.
+    sourceChunkIdx: uniqueIndex('resume_extraction_chunks_source_chunk_idx').on(
+      table.resumeExtractionId,
+      table.chunkIndex,
+    ),
+    embeddingIdx: index('resume_extraction_chunks_embedding_idx').using(
+      'hnsw',
+      table.embedding.op('vector_cosine_ops'),
+    ),
+  }),
+);
+
+export const vacancyChunks = pgTable(
+  'vacancy_chunks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    vacancyId: uuid('vacancy_id')
+      .notNull()
+      .references(() => vacancies.id, { onDelete: 'cascade' }),
+    chunkIndex: integer('chunk_index').notNull().default(0),
+    content: text('content').notNull(),
+    contentHash: text('content_hash').notNull(),
+    embedding: vector('embedding', { dimensions: 1536 }),
+    embeddingModel: text('embedding_model').notNull(),
+    tenantId: uuid('tenant_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    sourceChunkIdx: uniqueIndex('vacancy_chunks_source_chunk_idx').on(
+      table.vacancyId,
+      table.chunkIndex,
+    ),
+    embeddingIdx: index('vacancy_chunks_embedding_idx').using(
+      'hnsw',
+      table.embedding.op('vector_cosine_ops'),
+    ),
   }),
 );

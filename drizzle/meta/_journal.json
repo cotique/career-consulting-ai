@@ -141,6 +141,34 @@
       "when": 1788194091457,
       "tag": "0019_pgboss_tracker_queue",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788297537387,
+      "tag": "0020_pgvector_extension",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788297552910,
+      "tag": "0021_retrieval_chunks",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788297564336,
+      "tag": "0022_retrieval_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788297565642,
+      "tag": "0023_retrieval_reindex_queue",
+      "breakpoints": true
     }
   ]
 }

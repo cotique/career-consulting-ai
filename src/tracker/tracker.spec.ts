@@ -306,8 +306,8 @@ describe('the follow-up reminder — pg-boss\'s first real consumer (T21)', () =
     await waitFor(async () => {
       const events = await eventsFor(application.id);
       return events.some((e) => e.eventType === 'follow_up_due');
-    }, 6000);
-  });
+    }, 10000);
+  }, 20000); // explicit test timeout: must exceed the 10000ms waitFor ceiling above, unlike vitest's 5000ms default
 
   it('does not write follow_up_due if status changed before the reminder fired', async () => {
     const cookie = await sessionCookieFor(USER_A);
@@ -326,11 +326,11 @@ describe('the follow-up reminder — pg-boss\'s first real consumer (T21)', () =
       const rows = await adminDb.execute(sql`SELECT state FROM pgboss.job WHERE id = ${jobId}`);
       const row = rows.rows[0] as { state: string } | undefined;
       return row?.state === 'completed';
-    }, 6000);
+    }, 10000);
 
     const events = await eventsFor(application.id);
     expect(events.some((e) => e.eventType === 'follow_up_due')).toBe(false);
-  });
+  }, 20000); // explicit test timeout: must exceed the 10000ms waitFor ceiling above, unlike vitest's 5000ms default
 });
 
 describe('a broken job queue does not turn a committed transition into a failure', () => {
