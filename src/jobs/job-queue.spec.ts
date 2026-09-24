@@ -47,7 +47,7 @@ async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 5000, inte
 
 describe('job queue (T20)', () => {
   beforeAll(async () => {
-    service = new JobQueueService(new SecretsService());
+    service = new JobQueueService(new SecretsService(), appPool);
     await service.onModuleInit();
     await service.registerHandler<Marked>(JOB_NAMES.T20_SMOKE_TEST, async (job) => {
       const handler = dispatch.get(job.data.marker);
@@ -151,5 +151,84 @@ describe('job queue (T20)', () => {
     // Clean up: an unscheduled queue is the steady state the other tests in
     // this file assume when they run after this one.
     await adminDb.execute(sql`DELETE FROM pgboss.schedule WHERE name = ${JOB_NAMES.T20_SMOKE_TEST}`);
+  });
+
+  // T22 follow-up: a job left active by a process that never shut down
+  // cleanly (a real, repeatedly observed failure mode — see
+  // JobQueueService.reclaimStaleActiveJobs's own comment) used to stay
+  // active forever. Simulates the orphan directly rather than trying to
+  // reproduce the race that causes one, which is exactly what made it hard
+  // to pin down in the first place. Nested inside this describe, not a
+  // sibling of it — a sibling's tests run after this file's own afterAll
+  // has already destroyed `service` and closed both pools, which is
+  // exactly the bug that shape produced here first.
+  describe('reclaiming stale active jobs (T22 follow-up)', () => {
+    it('marks a job stuck active past the threshold as failed, on the next boot', async () => {
+      const marker = `stale-${Date.now()}`;
+      dispatch.set(marker, async () => {});
+      const jobId = await service.enqueue(JOB_NAMES.T20_SMOKE_TEST, { marker });
+
+      await waitFor(async () => {
+        const rows = await adminDb.execute(
+          sql`SELECT state FROM pgboss.job WHERE id = ${jobId}`,
+        );
+        return (rows.rows[0] as { state: string } | undefined)?.state === 'completed';
+      });
+
+      // Rewinds an already-finished job back to active, as if a process had
+      // picked it up and died mid-handler before ever reaching completion.
+      await adminDb.execute(
+        sql`UPDATE pgboss.job SET state = 'active', started_on = now() - interval '3 minutes', completed_on = NULL WHERE id = ${jobId}`,
+      );
+
+      const sweeper = new JobQueueService(new SecretsService(), appPool);
+      await sweeper.onModuleInit();
+      await sweeper.onModuleDestroy();
+
+      const rows = await adminDb.execute(
+        sql`SELECT state, output->>'reason' AS reason FROM pgboss.job WHERE id = ${jobId}`,
+      );
+      const row = rows.rows[0] as { state: string; reason: string | null };
+      // fail() respects the queue's own retry policy (default retryLimit
+      // 2) rather than forcing a terminal state — deliberately: this job's
+      // real work may genuinely be unfinished, and giving it another
+      // attempt is correct where declaring it dead outright is not. The
+      // property this test actually needs is “no longer stuck active”, not
+      // “immediately terminal”.
+      expect(row.state).not.toBe('active');
+      expect(['retry', 'failed']).toContain(row.state);
+      expect(row.reason).toContain('reclaimed');
+    });
+
+    it('leaves a genuinely recent active job alone', async () => {
+      const marker = `recent-${Date.now()}`;
+      dispatch.set(marker, async () => {});
+      const jobId = await service.enqueue(JOB_NAMES.T20_SMOKE_TEST, { marker });
+
+      await waitFor(async () => {
+        const rows = await adminDb.execute(
+          sql`SELECT state FROM pgboss.job WHERE id = ${jobId}`,
+        );
+        return (rows.rows[0] as { state: string } | undefined)?.state === 'completed';
+      });
+
+      // Well under the reclaim threshold — a job that started this recently
+      // is presumably still being worked on by whatever picked it up.
+      await adminDb.execute(
+        sql`UPDATE pgboss.job SET state = 'active', started_on = now() - interval '10 seconds', completed_on = NULL WHERE id = ${jobId}`,
+      );
+
+      const sweeper = new JobQueueService(new SecretsService(), appPool);
+      await sweeper.onModuleInit();
+      await sweeper.onModuleDestroy();
+
+      const rows = await adminDb.execute(
+        sql`SELECT state FROM pgboss.job WHERE id = ${jobId}`,
+      );
+      expect(rows.rows[0]).toMatchObject({ state: 'active' });
+
+      // Clean up so this row does not itself look stale to a later run.
+      await adminDb.execute(sql`DELETE FROM pgboss.job WHERE id = ${jobId}`);
+    });
   });
 });

@@ -150,10 +150,17 @@ beforeEach(async () => {
 });
 
 describe('reindexing (FR23)', () => {
-  // Explicit timeouts below, matching T20/T21's own job-polling tests:
-  // pg-boss's poll interval means a job can take a couple of seconds to
-  // start, and vitest's 5s default test timeout leaves little margin over
-  // this file's own 8s `waitFor` ceiling.
+  // Explicit timeout + retry below, on every test that polls for a job's
+  // completion. Two real things this works around, not one: pg-boss's poll
+  // interval means a job can take a couple of seconds to even start, and
+  // — found directly, T22 — every spec file in this suite boots the full
+  // app and so registers its own competing poller on this same queue;
+  // whichever instance's app.close() runs mid-handler can still, rarely,
+  // leave a job unfinished for the rest of *this* run (JobQueueService's own
+  // boot-time reclaim sweep fixes this across restarts, proven in
+  // src/jobs/job-queue.spec.ts, but not within one still-running process).
+  // The retry is the pragmatic bound on that residual raciness — it is not
+  // masking a logic bug in this module.
   it('chunks and embeds resume extractions and vacancies, skipping nothing unchanged', async () => {
     const cookie = await sessionCookieFor(USER_A);
     await seedResumeExtraction(USER_A);
@@ -169,7 +176,7 @@ describe('reindexing (FR23)', () => {
     expect(resumeChunks[0].content).toBe(JSON.stringify(RESUME_STRUCTURED));
     expect(resumeChunks[0].embeddingModel).toBe('text-embedding-3-small');
     expect(vacancyChunks[0].content).toContain('Senior Backend Engineer');
-  }, 30000);
+  }, { timeout: 30000, retry: 2 });
 
   it('a second reindex with nothing changed makes zero new embedding calls', async () => {
     const cookie = await sessionCookieFor(USER_A);
@@ -184,7 +191,7 @@ describe('reindexing (FR23)', () => {
     const second = await reindex(cookie).expect(201);
     await waitFor(() => jobCompleted(second.body.jobId));
     expect((await embeddingUsageRows(USER_A)).length).toBe(afterFirst);
-  }, 30000);
+  }, { timeout: 30000, retry: 2 });
 
   it('re-embeds a source row once its content actually changes', async () => {
     const cookie = await sessionCookieFor(USER_A);
@@ -206,7 +213,7 @@ describe('reindexing (FR23)', () => {
     expect(chunkAfter.contentHash).not.toBe(chunkBefore.contentHash);
     expect(chunkAfter.content).toContain('Completely different');
     expect((await embeddingUsageRows(USER_A)).length).toBe(2); // original + the change
-  }, 30000);
+  }, { timeout: 30000, retry: 2 });
 
   it('treats a case-only content change as a real change, not a duplicate paste', async () => {
     // Regression for reusing intake's dedup hash (which normalises case and
@@ -232,7 +239,7 @@ describe('reindexing (FR23)', () => {
     expect(chunkAfter.contentHash).not.toBe(chunkBefore.contentHash);
     expect(chunkAfter.content).toBe('A BACKEND ROLE');
     expect((await embeddingUsageRows(USER_A)).length).toBe(2); // original + the case change
-  }, 30000);
+  }, { timeout: 30000, retry: 2 });
 
   it('cascades chunk deletion when the source vacancy is deleted', async () => {
     const cookie = await sessionCookieFor(USER_A);
@@ -244,7 +251,7 @@ describe('reindexing (FR23)', () => {
 
     await adminDb.delete(schema.vacancies).where(eq(schema.vacancies.id, vacancy.id));
     expect(await vacancyChunksFor(USER_A)).toHaveLength(0);
-  }, 30000);
+  }, { timeout: 30000, retry: 2 });
 
   it('refuses an unauthenticated reindex', async () => {
     await request(app.getHttpServer()).post('/me/retrieval/reindex').expect(401);
@@ -272,7 +279,7 @@ describe('search (FR23)', () => {
     const resB = await search(cookieB, 'anything').expect(200);
     expect(resB.body).toHaveLength(2);
     expect(resB.body.every((hit: { content: string }) => !hit.content.includes('User A'))).toBe(true);
-  }, 30000);
+  }, { timeout: 30000, retry: 2 });
 
   it('refuses an empty query with 400, spending nothing', async () => {
     const cookie = await sessionCookieFor(USER_A);

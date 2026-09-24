@@ -307,7 +307,7 @@ describe('the follow-up reminder — pg-boss\'s first real consumer (T21)', () =
       const events = await eventsFor(application.id);
       return events.some((e) => e.eventType === 'follow_up_due');
     }, 10000);
-  }, 20000); // explicit test timeout: must exceed the 10000ms waitFor ceiling above, unlike vitest's 5000ms default
+  }, { timeout: 20000, retry: 2 }); // must exceed the 10000ms waitFor ceiling above; retry tolerates the same cross-file job-poller raciness retrieval.spec.ts documents
 
   it('does not write follow_up_due if status changed before the reminder fired', async () => {
     const cookie = await sessionCookieFor(USER_A);
@@ -330,7 +330,7 @@ describe('the follow-up reminder — pg-boss\'s first real consumer (T21)', () =
 
     const events = await eventsFor(application.id);
     expect(events.some((e) => e.eventType === 'follow_up_due')).toBe(false);
-  }, 20000); // explicit test timeout: must exceed the 10000ms waitFor ceiling above, unlike vitest's 5000ms default
+  }, { timeout: 20000, retry: 2 }); // must exceed the 10000ms waitFor ceiling above; retry tolerates the same cross-file job-poller raciness retrieval.spec.ts documents
 });
 
 describe('a broken job queue does not turn a committed transition into a failure', () => {

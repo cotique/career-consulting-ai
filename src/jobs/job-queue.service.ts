@@ -1,7 +1,22 @@
-import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import PgBoss from 'pg-boss';
+import type { Pool } from 'pg';
+import { PG_POOL } from '../db/db.module';
 import { SecretsService } from '../config/secrets.service';
 import type { JobName } from './job-name';
+
+/**
+ * A job older than this, still active, was abandoned mid-handler by a
+ * process that never got to call onModuleDestroy — killed outright, or
+ * (observed directly, T22) torn down by a test runner before pg-boss's own
+ * 30s graceful-shutdown wait could finish. pg-boss's own failWip()
+ * mechanism exists for exactly this and should catch most cases on its own,
+ * but does not reliably run when the owning process itself never shuts down
+ * cleanly — this sweep is the backstop for what that leaves behind. A real
+ * job taking longer than this to run is not expected at this scale; revisit
+ * the threshold if one legitimately does.
+ */
+const STALE_ACTIVE_THRESHOLD_MS = 2 * 60 * 1000;
 
 /**
  * The single entry point for background jobs (T20). Enqueues, registers
@@ -13,7 +28,10 @@ export class JobQueueService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(JobQueueService.name);
   private boss: PgBoss | undefined;
 
-  constructor(private readonly secrets: SecretsService) {}
+  constructor(
+    private readonly secrets: SecretsService,
+    @Inject(PG_POOL) private readonly pool: Pool,
+  ) {}
 
   /**
    * `migrate: false`: `app_user` has no CREATE rights (`drizzle/0002_app_runtime_role.sql`)
@@ -42,6 +60,7 @@ export class JobQueueService implements OnModuleInit, OnModuleDestroy {
     this.boss = new PgBoss({ connectionString, schema: 'pgboss', migrate: false, schedule: false });
     this.boss.on('error', (err) => this.logger.error('pg-boss error', err as Error));
     await this.boss.start();
+    await this.reclaimStaleActiveJobs();
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -53,7 +72,12 @@ export class JobQueueService implements OnModuleInit, OnModuleDestroy {
     // app rather than letting the rest of shutdown run.
     if (!this.boss) return;
     try {
-      await this.boss.stop({ graceful: true });
+      // pg-boss's own default graceful timeout is 30s — too long for this
+      // app's actual job durations, and risky on Azure Container Apps'
+      // scale-to-zero: a shutdown that takes longer than the platform's own
+      // SIGTERM grace period gets force-killed anyway, the exact outcome
+      // graceful shutdown exists to avoid. Shortened, not disabled.
+      await this.boss.stop({ graceful: true, timeout: 5000 });
     } catch (err) {
       this.logger.error('pg-boss failed to stop gracefully', err as Error);
     }
@@ -114,5 +138,42 @@ export class JobQueueService implements OnModuleInit, OnModuleDestroy {
       throw new Error('JobQueueService used before onModuleInit ran.');
     }
     return this.boss;
+  }
+
+  /**
+   * Backstop for a job left active by a process that never shut down
+   * cleanly (see the constant's own comment). Runs once, at boot, before
+   * this instance starts polling for new work — so it never fights a job
+   * this same instance is legitimately still processing (there is none yet).
+   * pgboss.* carries no RLS by design (see docs/ARCHITECTURE.md), so a
+   * plain pool query is the correct access path here, not withUserContext.
+   *
+   * `boss.fail()` respects the queue's own retry policy rather than forcing
+   * a terminal state — a reclaimed job with retries left moves to `retry`,
+   * not straight to `failed`. That is the right default here: the job's
+   * real work may genuinely be unfinished, and another attempt (by whatever
+   * instance next picks it up) is correct where declaring it dead outright
+   * is not. If that next attempt is itself abandoned, this same sweep
+   * catches it again on a later boot — self-healing, not a single shot.
+   */
+  private async reclaimStaleActiveJobs(): Promise<void> {
+    const boss = this.requireBoss();
+    const staleBefore = new Date(Date.now() - STALE_ACTIVE_THRESHOLD_MS);
+    const { rows } = await this.pool.query<{ id: string; name: string }>(
+      "SELECT id, name FROM pgboss.job WHERE state = 'active' AND started_on < $1",
+      [staleBefore],
+    );
+
+    for (const row of rows) {
+      await boss.fail(row.name, row.id, {
+        reason: 'reclaimed on boot: abandoned by a process that never shut down cleanly',
+      });
+    }
+
+    if (rows.length > 0) {
+      this.logger.warn(
+        `Reclaimed ${rows.length} stale active job(s) left over from a previous process.`,
+      );
+    }
   }
 }
