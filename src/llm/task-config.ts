@@ -24,6 +24,7 @@ export interface TaskModelConfig {
  * | `resume_extraction` | accurate; cost secondary | very low (once per resume) | Everything downstream derives from this — a misread of the resume propagates into every score and every tailored document. Low volume makes a strong model nearly free here. |
  * | `tailoring`         | expensive, best available | low-mid | The output *is* the product: text a human sends to an employer. Writing quality is the whole point, and this is the last place to economise. |
  * | `onboarding_parsing`| cheap + fast | very low (once) | Low stakes: the user reviews and confirms the result before it is stored, so a miss is visible and correctable rather than silent. |
+ * | `chat`              | cheap + fast, until proven insufficient | mid (once per turn) | Same "escalate only if it proves untrustworthy in dogfooding" policy as scoring — retrieval carries the facts, chat only has to compose them into an answer. |
  *
  * Fast matters where a person is waiting (onboarding, anything synchronous);
  * it matters much less inside a batch job nobody watches.
@@ -34,4 +35,5 @@ export const TASK_MODELS: Record<TaskType, TaskModelConfig> = {
   resume_extraction: { provider: 'anthropic', model: 'claude-haiku-4-5' },
   tailoring: { provider: 'anthropic', model: 'claude-haiku-4-5' },
   onboarding_parsing: { provider: 'anthropic', model: 'claude-haiku-4-5' },
+  chat: { provider: 'anthropic', model: 'claude-haiku-4-5' },
 };

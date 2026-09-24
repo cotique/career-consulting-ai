@@ -102,9 +102,11 @@ export async function conversationUsage(
 
 /**
  * Refuses a call that would exceed a conversation's turn cap. The *mechanism*
- * lands now, while the layer is small; the per-feature constants (coaching ≤7,
- * mock interviews ≤30, wellbeing ≤20) belong to those features and arrive with
- * the first conversational one (T19).
+ * landed ahead of any caller; chat (T19) is the first real one, at 50 turns
+ * (src/chat/chat.service.ts) — loose since the monthly spend cap (NFR2) is
+ * the real backstop, this only bounds one conversation's share of it.
+ * Coaching/mock-interviews/wellbeing remain unbuilt; each gets its own
+ * constant, chosen for its own shape, when it lands.
  */
 export async function assertWithinConversationLimit(
   db: Database,
