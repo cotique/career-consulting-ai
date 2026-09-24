@@ -8,6 +8,8 @@ interface ModelPricing {
 
 const PRICES: Record<string, ModelPricing> = {
   'claude-haiku-4-5': { inputPerMTok: 1.0, outputPerMTok: 5.0 },
+  // No output tokens for an embedding.
+  'text-embedding-3-small': { inputPerMTok: 0.02, outputPerMTok: 0 },
 };
 
 export function estimateCostUsd(model: string, inputTokens: number, outputTokens: number): number {

@@ -7,6 +7,7 @@ import type {
   ProviderCompletionParams,
   ProviderCompletionResult,
 } from './provider.interface';
+import { assertNotUnderTest } from './refuse-in-tests';
 
 // The only place in the codebase allowed to import the Anthropic SDK —
 // business logic goes through LlmService (see implement-plan conventions).
@@ -27,6 +28,7 @@ export class AnthropicProvider implements LlmProvider {
   }
 
   async complete(params: ProviderCompletionParams): Promise<ProviderCompletionResult> {
+    assertNotUnderTest('AnthropicProvider');
     const client = await this.getClient();
 
     let response: Anthropic.Message;

@@ -6,7 +6,7 @@ Everything decided but not built is a checkbox under **TODO** rather than a para
 
 ## What is built
 
-Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, vacancy intake by paste with structured parsing, scoring a parsed vacancy against a profile and resume, a Postgres-backed job queue, an application tracker with a follow-up reminder, account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
+Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, vacancy intake by paste with structured parsing, scoring a parsed vacancy against a profile and resume, a Postgres-backed job queue, an application tracker with a follow-up reminder, retrieval infrastructure over resumes and vacancies (chunking, embedding, similarity search), account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
 
 Document tailoring was dropped from scope entirely, and so is absent from the list below.
 
@@ -14,7 +14,7 @@ Document tailoring was dropped from scope entirely, and so is absent from the li
 
 Decided, shaped for, and not built. Each is specified in the section named; the tables that anticipate them were kept rather than dropped, since removing them would be a migration whose only benefit is tidiness.
 
-- [ ] **pgvector, a vector column, and retrieval over them** — *Retrieval and chat*. The database image can provide the extension; no migration enables it.
+- [ ] **Chat itself** — *Retrieval and chat*. Retrieval (chunking, embedding, similarity search over resumes and vacancies) is built; a conversational endpoint generating answers from retrieved chunks is not.
 
 ## Data model
 
@@ -48,6 +48,8 @@ Deletion and export were built in the first release rather than retrofitted. Del
 - **Spend stops rather than being reported.** Three bounds: the worst case of a single attempt, computed before it is sent; a per-user monthly cap; and a per-conversation turn count. All are checked before every attempt, since a retry is another paid call. A validation retry costs money but does not consume a conversation turn — the model failing to follow a schema is not something to charge to the person.
 - **Usage rows are written on the layer's own connection**, never the caller's. When they shared one, a failed call rolled back the record of money already spent — and the monthly cap is computed from exactly those rows, so failures cost real money and counted for nothing.
 - **A typed failure taxonomy** — retryable, permanent, spend-related — shaped for whoever must act on it, and mapped to HTTP in one place by kind rather than by class, so a new failure type arrives already handled.
+- **Embeddings (T22) are a sibling service, not a method on the completion one** — no system/user split, no structured-output retry, so they don't share `LlmService.run()`'s shape. They reuse its spend guards and usage logging into the same table, through OpenAI (Anthropic has no embeddings API), behind the same one-file-per-SDK rule.
+- **Every real provider is backed by its fake by default under a test run, not only where a spec file thinks to override it.** Found the hard way: every spec file boots the full app, and a background-job handler registered by one domain module (T21's tracker, T22's retrieval) is reachable from *any* spec file's own instance of it, since they all share one local Postgres and its pg-boss queues. A spec file with no reason to care about retrieval was a genuine, reachable competing consumer for a job a different spec file enqueued, and its own un-overridden provider used a real (here: invalid) API key from `.env` — briefly, until this was made structurally unreachable rather than just usually avoided.
 
 Inference is not EU-resident. Verified rather than assumed: the first-party API offers no EU routing value on any model, and the provider surface that does would be a second implementation behind the same interface — which is what the abstraction is for. For a single operator processing their own data this is a documentation gap; it would not be for anyone else.
 
@@ -135,12 +137,13 @@ One developer, so there is no rotation to name. What stands in for one: an autom
 
 ## Retrieval and chat
 
-On the TODO list. The rules were settled in advance rather than invented under pressure, because chat is the first feature that would produce a vector and every one of these choices is expensive to reverse once vectors exist.
+The rules below were settled in advance rather than invented under pressure, because chat is the first feature that would produce a vector and every one of these choices is expensive to reverse once vectors exist. **Retrieval infrastructure (T22) applies them**; chat itself — a conversational endpoint, generation over retrieved chunks — stays on the TODO list.
 
-- **Storage** would be a vector column in the same Postgres, not a second vector service.
-- **The corpus is the application's own rows** — extracted resumes, parsed vacancies, scores, applications and their events. Chunks derive from those, which means ownership and erasure need no separate treatment (a chunk descends from a row that already cascades) and staleness has a definition rather than a heuristic (a chunk is stale when its source row changed). Nothing outside the database is a source, and no ingestion path reads a filesystem.
-- **Ingestion is job-shaped** — chunking and embedding are slow and worth retrying — while query-time retrieval and generation stay synchronous, because someone is waiting for the answer.
-- **One embedding model across the system**, with the model version stored beside every vector, so a model change becomes an explicit "this vector is stale" flag rather than a silent decay in search quality. HNSW rather than IVFFlat: the latter needs training on data and behaves poorly on small, growing tables.
+- **Storage is a vector column in the same Postgres**, not a second vector service — `pgvector`, enabled by migration, `vector(1536)` columns, HNSW indexes.
+- **The corpus is the application's own rows.** Built so far: extracted resumes and parsed vacancies. Scores, applications and their events are deliberately not chunked yet — same "one focused slice" precedent as T20/T21, not a scope cut. Each source type gets its own chunk table with a real `ON DELETE CASCADE` FK to its specific source row — no polymorphic `chunks` table — which is what makes ownership and erasure need no separate treatment (ownership deletes the chunk without any application code knowing it happened). Staleness is a content hash stored beside each chunk: a reindex skips a source row whose hash hasn't changed, so nothing is ever re-embedded, and re-paid for, without cause. Nothing outside the database is a source, and no ingestion path reads a filesystem.
+- **Ingestion is job-shaped and manually triggered** (`POST /me/retrieval/reindex`) — chunking and embedding are slow and worth retrying, and every LLM/embedding-calling action in this app runs at the caller's own request rather than as a side effect of an unrelated write. Query-time retrieval (`POST /me/retrieval/search`) stays synchronous, because someone is waiting for the answer.
+- **One embedding model across the system** (`text-embedding-3-small`, via OpenAI), with the model version stored beside every vector, so a model change becomes an explicit "this vector is stale" flag rather than a silent decay in search quality. HNSW rather than IVFFlat: the latter needs training on data and behaves poorly on small, growing tables.
+- **A long vacancy posting is truncated, not really chunked, for now** — one row still renders to one chunk, capped well under the embedding model's input limit. The schema's `chunkIndex` column already allows real sliding-window splitting later without a migration; nothing needed it yet at this corpus's size.
 
 ## Deliberately deferred
 
@@ -165,6 +168,7 @@ The code and tests cite these in comments and test names. This is an index, not 
 | **FR7** | a parsed vacancy scored against a profile and resume | Vacancy intake and scoring |
 | **FR21** | onboarding is step-addressable | cited by the code as the reason for a payload shape; the step itself was never built |
 | **FR22** | an application is tracked through its lifecycle, with a follow-up reminder if it goes quiet | Execution model, `src/tracker` |
+| **FR23** | the user's own resumes and vacancies are chunked, embedded, and searchable by similarity query | Retrieval and chat |
 | **NFR1** | every model call is metered | The LLM layer |
 | **NFR2** | spend capped per attempt, per conversation, per month | The LLM layer |
 | **NFR3** | secrets from a managed store through one path | Hosting |
@@ -175,3 +179,4 @@ The code and tests cite these in comments and test names. This is an index, not 
 | **NFR11** | one entry point for model calls | The LLM layer |
 | **NFR15** | European markets only at launch, marked rather than silently dropped | Vacancy intake and scoring |
 | **NFR16** | no recovery mechanism outlives a deletion request | Personal data |
+| **NFR17** | one embedding model version stored beside every vector; a model change is an explicit stale flag, not silent decay | Retrieval and chat |

@@ -1,6 +1,6 @@
 /**
  * Queue names provisioned by migration (see `drizzle/0016_pgboss_queues.sql`,
- * `drizzle/0019_pgboss_tracker_queue.sql`).
+ * `drizzle/0019_pgboss_tracker_queue.sql`, `drizzle/0023_retrieval_reindex_queue.sql`).
  * `pgboss.create_queue()` does real DDL and runs as its caller, and `app_user`
  * has no CREATE rights — so a queue must exist before `send()`/`work()` can
  * touch it, and a new one is a migration, never a runtime call. This union is
@@ -9,6 +9,7 @@
 export const JOB_NAMES = {
   T20_SMOKE_TEST: 't20-smoke-test',
   TRACKER_FOLLOW_UP: 'tracker-follow-up',
+  RETRIEVAL_REINDEX: 'retrieval-reindex',
 } as const;
 
 export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
