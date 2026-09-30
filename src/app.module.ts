@@ -15,6 +15,7 @@ import { TailoringModule } from './tailoring/tailoring.module';
 import { MemoryModule } from './memory/memory.module';
 import { TrackerModule } from './tracker/tracker.module';
 import { RetrievalModule } from './retrieval/retrieval.module';
+import { ChatModule } from './chat/chat.module';
 import { SelfAuditModule } from './self-audit/self-audit.module';
 import { WellbeingModule } from './wellbeing/wellbeing.module';
 
@@ -36,6 +37,7 @@ import { WellbeingModule } from './wellbeing/wellbeing.module';
     MemoryModule,
     TrackerModule,
     RetrievalModule,
+    ChatModule,
     SelfAuditModule,
     WellbeingModule,
   ],

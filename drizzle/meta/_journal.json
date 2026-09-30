@@ -169,6 +169,20 @@
       "when": 1788297565642,
       "tag": "0023_retrieval_reindex_queue",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790261719546,
+      "tag": "0024_chat_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790261727004,
+      "tag": "0025_chat_rls",
+      "breakpoints": true
     }
   ]
 }

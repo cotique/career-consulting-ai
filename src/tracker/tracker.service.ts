@@ -5,7 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  OnModuleInit,
+  OnApplicationBootstrap,
 } from '@nestjs/common';
 import { and, asc, desc, eq } from 'drizzle-orm';
 import type { Pool } from 'pg';
@@ -34,7 +34,7 @@ function isApplicationStatus(value: string): value is ApplicationStatus {
 }
 
 @Injectable()
-export class TrackerService implements OnModuleInit {
+export class TrackerService implements OnApplicationBootstrap {
   private readonly logger = new Logger(TrackerService.name);
 
   constructor(
@@ -48,8 +48,13 @@ export class TrackerService implements OnModuleInit {
    * calling `registerHandler` more than once against the same queue starts a
    * second poller competing with the first for the same rows (the exact race
    * T20's own test suite hit).
+   *
+   * `onApplicationBootstrap`, not `onModuleInit` — see RetrievalService's
+   * own comment on this (T19): Nest only guarantees `onModuleInit` runs
+   * before *this module's own* dependencies are ready, not every other
+   * module's, and this needs JobsModule specifically to be ready first.
    */
-  async onModuleInit(): Promise<void> {
+  async onApplicationBootstrap(): Promise<void> {
     await this.jobQueue.registerHandler<FollowUpJobPayload>(JOB_NAMES.TRACKER_FOLLOW_UP, (job) =>
       this.handleFollowUp(job.data),
     );

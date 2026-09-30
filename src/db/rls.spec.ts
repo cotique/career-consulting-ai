@@ -83,6 +83,16 @@ describe('Row-Level Security', () => {
       applicationId: applicationA.id,
       eventType: 'sourced',
     });
+    const [conversationA] = await adminDb
+      .insert(schema.conversations)
+      .values({ userId: userA })
+      .returning();
+    await adminDb.insert(schema.messages).values({
+      userId: userA,
+      conversationId: conversationA.id,
+      role: 'user',
+      content: 'hello',
+    });
   });
 
   // Using `set_config(...)` rather than `SET LOCAL app.current_user_id = $1`
@@ -117,6 +127,8 @@ describe('Row-Level Security', () => {
     'applications',
     'resume_extraction_chunks',
     'vacancy_chunks',
+    'conversations',
+    'messages',
   ])('%s: direct user_id policy hides another user\'s rows', async (table) => {
     const client = await appPool.connect();
     try {

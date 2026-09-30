@@ -387,3 +387,36 @@ export const vacancyChunks = pgTable(
     ),
   }),
 );
+
+// --- Chat (T19) ------------------------------------------------------------
+
+export const conversations = pgTable('conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  title: text('title'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const messageRoleEnum = pgEnum('message_role', ['user', 'assistant']);
+
+export const messages = pgTable('messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  conversationId: uuid('conversation_id')
+    .notNull()
+    .references(() => conversations.id, { onDelete: 'cascade' }),
+  role: messageRoleEnum('role').notNull(),
+  content: text('content').notNull(),
+  // The chunks (sourceTable, sourceId, score — never the chunk's own text,
+  // already recoverable from resume_extraction_chunks/vacancy_chunks by id)
+  // an assistant reply was grounded in. Null on `user` rows. Same reason
+  // T17 kept vacancy_scores.breakdown rather than just the score: "why did
+  // it say that" needs the grounding, and unlike a score, chat's grounding
+  // changes every turn.
+  retrievedContext: jsonb('retrieved_context'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});

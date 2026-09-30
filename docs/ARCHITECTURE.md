@@ -6,7 +6,7 @@ Everything decided but not built is a checkbox under **TODO** rather than a para
 
 ## What is built
 
-Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, vacancy intake by paste with structured parsing, scoring a parsed vacancy against a profile and resume, a Postgres-backed job queue, an application tracker with a follow-up reminder, retrieval infrastructure over resumes and vacancies (chunking, embedding, similarity search), account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
+Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, vacancy intake by paste with structured parsing, scoring a parsed vacancy against a profile and resume, a Postgres-backed job queue, an application tracker with a follow-up reminder, retrieval over resumes and vacancies (chunking, embedding, similarity search) feeding a chat endpoint that answers grounded in them, account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
 
 Document tailoring was dropped from scope entirely, and so is absent from the list below.
 
@@ -14,7 +14,7 @@ Document tailoring was dropped from scope entirely, and so is absent from the li
 
 Decided, shaped for, and not built. Each is specified in the section named; the tables that anticipate them were kept rather than dropped, since removing them would be a migration whose only benefit is tidiness.
 
-- [ ] **Chat itself** — *Retrieval and chat*. Retrieval (chunking, embedding, similarity search over resumes and vacancies) is built; a conversational endpoint generating answers from retrieved chunks is not.
+Nothing currently — the last entry here (chat) landed in T19.
 
 ## Data model
 
@@ -89,6 +89,8 @@ For anything long-lived the intended shape is a state machine on domain tables �
 
 **The application tracker (T21)** is the first thing to actually be that shape, and pg-boss's first real consumer: `applications.status` plus an append-only `application_events` timeline, with a delayed job as the one timer — a follow-up reminder enqueued when an application reaches `applied`, firing 14 days later if nothing else happened first. A later status change does not cancel that job (there is no cancel-by-key mechanism), so a stale reminder can fire after the application has already moved on; its handler checks the current status and writes nothing if it no longer applies. Accepted as-is — the alternative is tracking a job id per application solely to cancel it, for a reminder that is otherwise harmless to skip.
 
+A domain module that registers a job handler does so in `onApplicationBootstrap`, not `onModuleInit` — found the hard way, T19: Nest only guarantees `onModuleInit` finishes before *that module's own* dependencies are ready, not before every other module's, so `JobsModule` initializing first was accidental (true only while nothing else's import graph reordered it) rather than guaranteed. `onApplicationBootstrap` is the one hook Nest runs strictly after every module's `onModuleInit` has completed, which is the actual guarantee `registerHandler` needs.
+
 ## Hosting
 
 A container on a managed platform with scale-to-zero, a managed Postgres, and object storage for files. Secrets come from a managed vault reached by workload identity, never from environment configuration, through exactly one code path with a swappable backend.
@@ -137,13 +139,16 @@ One developer, so there is no rotation to name. What stands in for one: an autom
 
 ## Retrieval and chat
 
-The rules below were settled in advance rather than invented under pressure, because chat is the first feature that would produce a vector and every one of these choices is expensive to reverse once vectors exist. **Retrieval infrastructure (T22) applies them**; chat itself — a conversational endpoint, generation over retrieved chunks — stays on the TODO list.
+The rules below were settled in advance rather than invented under pressure, because chat is the first feature that would produce a vector and every one of these choices is expensive to reverse once vectors exist. **Retrieval infrastructure (T22) applies them; chat (T19) is the consumer they were built for.**
 
 - **Storage is a vector column in the same Postgres**, not a second vector service — `pgvector`, enabled by migration, `vector(1536)` columns, HNSW indexes.
 - **The corpus is the application's own rows.** Built so far: extracted resumes and parsed vacancies. Scores, applications and their events are deliberately not chunked yet — same "one focused slice" precedent as T20/T21, not a scope cut. Each source type gets its own chunk table with a real `ON DELETE CASCADE` FK to its specific source row — no polymorphic `chunks` table — which is what makes ownership and erasure need no separate treatment (ownership deletes the chunk without any application code knowing it happened). Staleness is a content hash stored beside each chunk: a reindex skips a source row whose hash hasn't changed, so nothing is ever re-embedded, and re-paid for, without cause. Nothing outside the database is a source, and no ingestion path reads a filesystem.
 - **Ingestion is job-shaped and manually triggered** (`POST /me/retrieval/reindex`) — chunking and embedding are slow and worth retrying, and every LLM/embedding-calling action in this app runs at the caller's own request rather than as a side effect of an unrelated write. Query-time retrieval (`POST /me/retrieval/search`) stays synchronous, because someone is waiting for the answer.
 - **One embedding model across the system** (`text-embedding-3-small`, via OpenAI), with the model version stored beside every vector, so a model change becomes an explicit "this vector is stale" flag rather than a silent decay in search quality. HNSW rather than IVFFlat: the latter needs training on data and behaves poorly on small, growing tables.
 - **A long vacancy posting is truncated, not really chunked, for now** — one row still renders to one chunk, capped well under the embedding model's input limit. The schema's `chunkIndex` column already allows real sliding-window splitting later without a migration; nothing needed it yet at this corpus's size.
+- **Chat (T19) answers using retrieval, not native multi-turn history** — the provider abstraction is single-shot (one system prompt, one user message, no message array), so a conversation's prior turns are rendered into the prompt as bounded text (the last 5 turns) rather than sent as a real message list. The tradeoff this makes explicitly: the model has no memory of turn 6 onward, acceptable because retrieval carries the facts each turn and history mostly carries continuity, not new grounding.
+- **Each answer records what it was grounded in.** An assistant message stores which chunks (source table, source id, similarity score — not their text, already recoverable from the chunk tables by id) fed that specific answer, the same transparency precedent T17 set for `vacancy_scores.breakdown`: unlike a score, chat's grounding changes every turn, so the question “why did it say that” needs a per-message answer, not a per-feature one.
+- **The per-conversation turn cap (T9-T11) has its first real caller.** 50 turns — loose enough not to interrupt a real session, tight enough to catch a client bug looping silently. The monthly spend cap (NFR2) is still the real backstop; this only bounds one conversation's share of it. Its refusal (`ConversationLimitError`) was pinned to the wrong HTTP status while nothing called it (`permanent`/400, meaning “never retry”) — corrected to `budget`/429 now that a hit genuinely does mean “try again, in a new conversation.”
 
 ## Deliberately deferred
 
@@ -169,6 +174,7 @@ The code and tests cite these in comments and test names. This is an index, not 
 | **FR21** | onboarding is step-addressable | cited by the code as the reason for a payload shape; the step itself was never built |
 | **FR22** | an application is tracked through its lifecycle, with a follow-up reminder if it goes quiet | Execution model, `src/tracker` |
 | **FR23** | the user's own resumes and vacancies are chunked, embedded, and searchable by similarity query | Retrieval and chat |
+| **FR24** | a multi-turn conversation, grounded in the user's own retrieved material | Retrieval and chat |
 | **NFR1** | every model call is metered | The LLM layer |
 | **NFR2** | spend capped per attempt, per conversation, per month | The LLM layer |
 | **NFR3** | secrets from a managed store through one path | Hosting |

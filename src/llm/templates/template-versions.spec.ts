@@ -31,6 +31,10 @@ const PINNED: Record<string, { version: string; sha256: string }> = {
     version: 'vacancy-score-v1',
     sha256: '3bba14de7298c67da0e05043b71c07595eefae3074bf8af5e2323c408b2c6333',
   },
+  chat: {
+    version: 'chat-v1',
+    sha256: '154e3ee728438dee35e934c48b7408e5ec2323cd5ad42e0c1645edb4cbfa7fa7',
+  },
 };
 
 /**
