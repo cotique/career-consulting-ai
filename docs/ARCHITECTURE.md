@@ -6,9 +6,9 @@ Everything decided but not built is a checkbox under **TODO** rather than a para
 
 ## What is built
 
-Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, vacancy intake by paste with structured parsing, scoring a parsed vacancy against a profile and resume, a Postgres-backed job queue, an application tracker with a follow-up reminder, retrieval over resumes and vacancies (chunking, embedding, similarity search) feeding a chat endpoint that answers grounded in them, account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
+Sign-in through Google, an onboarding profile including a free-text step parsed by a model, resume upload with structured extraction, vacancy intake by paste with structured parsing, scoring a parsed vacancy against a profile and resume, resume tailoring to a parsed vacancy (reordering and rewording only), a Postgres-backed job queue, an application tracker with a follow-up reminder, retrieval over resumes and vacancies (chunking, embedding, similarity search) feeding a chat endpoint that answers grounded in them, account export and deletion, and the infrastructure underneath — the LLM layer, per-request database isolation, rate limiting, telemetry and the deployment pipeline.
 
-Document tailoring was dropped from scope entirely, and so is absent from the list below.
+Document tailoring was dropped from scope and then reinstated in a much narrower form — see **Resume tailoring** below for what it is and, more to the point, what it cannot do.
 
 ## TODO
 
@@ -72,6 +72,20 @@ The consequence at intake: a posting outside the supported European markets is s
 Scoring re-surfaces the same market-scope blocker computed at intake rather than inventing a second blocker vocabulary — nothing yet needs a blocker that only scoring, not intake, could know about.
 
 Each score is inserted as a new row rather than overwriting the last one — a snapshot of that model, that prompt version, against the profile and resume as they stood at that moment. It is not recomputed when the profile or resume changes later, which means a stale score can sit next to a profile it no longer reflects. *Revisit when re-scoring on profile change is worth the calls it would spend — most likely once the profile starts changing often enough for staleness to be the more visible problem.*
+
+## Resume tailoring
+
+**Reversed.** Tailoring was dropped from scope, then brought back in the narrowest form the original reasons still allow. What was feared was a model writing text a person sends to an employer; what is built is a model that cannot, because it never writes the resume at all.
+
+The model returns a *plan* — an order for the bullets inside each role, an order for the skills, and a few reworded bullets — and code builds the result from the original extracted resume. The plan has no field for a company, a title, a date, a skill, an education entry or a contact detail, so a model that volunteers one has it stripped by the parser rather than caught by a check. Roles keep their original order. Skills are reordered, never added.
+
+A reworded bullet is the one place the model's words reach the output, and the code bounds it rather than trusting it. An edit is applied only if every keyword it claims is in the posting and in the new wording, its numbers are unchanged, it is one line, it is neither much longer nor much shorter than the bullet it replaces, and every word in it either occurs somewhere in the resume or is a posting term the edit claims as a keyword. Claiming is the point of that last rule: every posting term an edit introduces appears in the change list the reader approves, and one introduced without being claimed is refused. An edit that fails is dropped and listed beside the ones that were applied, so what was refused is visible. A reorder that is not a real permutation, or any index outside the resume, means the model misread the structure, and the whole plan is refused — with the call still recorded as spend, and without a retry, since the same input would be misread the same way.
+
+**These checks bound a rewording; they cannot prove it is still true.** That is why every result is a draft, stored with a before-and-after for each change, and why nothing is approved until the person reads it and says so. A bullet can pass every check and still overstate — in particular, a model can claim a posting term the bullet never supported, and the code has no way to tell a synonym from an invention. The claimed keywords are listed beside each change for exactly that reason: the approval step is the control, not the validator.
+
+**Synchronous**, like scoring: one short call someone is waiting on. Each run inserts a new version rather than overwriting the last, and nothing re-tailors when the resume or the posting changes later. The contacts block is never in the prompt — the model is given numbered roles, bullets and skills — and is put back by code when the document is rendered. An email or phone number typed *inside* a bullet or the summary is not scrubbed; the layer removes the structured contacts field, not patterns in free text, and scoring behaves the same way.
+
+**Stored in `tailored_documents`**, which already carried owner, author, state and version: a markdown rendering for reading, the tailored structure, and the changes against the source. The two structured columns were added nullable, so the table's earlier rows and the previous revision are unaffected.
 
 ## Execution model
 
@@ -158,6 +172,9 @@ Decisions not made, as distinct from the decisions made and recorded above:
 - **Rate-limit counters are in-process.** With one replica that is the whole picture; past one, each replica keeps its own and the effective limit multiplies by the replica count.
 - **CORS is undecided** — there is no frontend to scope it against.
 - **A second identity provider**, and linking one to an existing account. The identity model is provider-agnostic already. Linking must be an authenticated action rather than an inference at sign-in, which is why the endpoint does not exist rather than existing unguarded.
+- **Tailoring covers the resume only.** Cover letters are not generated; the `cover_letter` document type exists in the schema and nothing writes it. There is no PDF or Word rendering — the output is markdown and structure.
+- **The word check on a reworded bullet is blunt.** It refuses an edit that uses a word found neither in the resume nor among the posting terms the edit claims. That also refuses harmless connecting words when the resume is short, so a good edit can be dropped; the dropped edit is listed with its reason, and loosening the check is a decision to make from real output rather than in advance.
+- **Tailored-document versions are numbered, not constrained.** The next version is read and then written inside one request, with no unique constraint behind it. A solo user cannot race themselves; a second user of the same account could.
 - **Uploaded files are not scanned for malware**, and the accepted type is the one the client declares rather than what the leading bytes say — which refuses honest callers that omit it and constrains dishonest ones not at all.
 
 ## Requirement identifiers
@@ -175,6 +192,7 @@ The code and tests cite these in comments and test names. This is an index, not 
 | **FR22** | an application is tracked through its lifecycle, with a follow-up reminder if it goes quiet | Execution model, `src/tracker` |
 | **FR23** | the user's own resumes and vacancies are chunked, embedded, and searchable by similarity query | Retrieval and chat |
 | **FR24** | a multi-turn conversation, grounded in the user's own retrieved material | Retrieval and chat |
+| **FR25** | a resume is reordered, and its bullets reworded, to fit a parsed vacancy without changing a fact; the result is a draft until approved | Resume tailoring |
 | **NFR1** | every model call is metered | The LLM layer |
 | **NFR2** | spend capped per attempt, per conversation, per month | The LLM layer |
 | **NFR3** | secrets from a managed store through one path | Hosting |

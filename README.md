@@ -13,11 +13,12 @@ Apps through a manually triggered pipeline.
 Sign-in through Google, an onboarding profile with a free-text step the model
 parses, resume upload with structured extraction, vacancy intake by paste with
 structured parsing, scoring a parsed vacancy against a profile and resume,
-account export and deletion, and the layer all of that runs on.
+tailoring a resume to a vacancy by reordering and rewording only, account export
+and deletion, and the layer all of that runs on.
 
 The application tracker is decided and unbuilt — the [TODO
-list](docs/ARCHITECTURE.md#todo) says what it still needs. Document
-tailoring was dropped from scope entirely.
+list](docs/ARCHITECTURE.md#todo) says what it still needs. Tailoring covers the
+resume only; cover letters are not generated.
 
 ## The parts worth reading
 
