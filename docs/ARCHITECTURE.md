@@ -113,6 +113,8 @@ Concretely that is Azure Container Apps, Azure Database for PostgreSQL and Blob 
 
 A migration to another cloud was considered and is **cancelled**. Where an argument in this document once rested on portability, it now rests on its own merits or has been dropped.
 
+Nothing is currently deployed: the Azure resources were torn down (2026-09) while the project was dormant, for cost reasons — an operational pause, not a reversal of the decision above. Redeploying means standing those same three resources back up, not a migration.
+
 ## CI/CD
 
 CI runs on every push: install, typecheck, lint, build, and tests against a real Postgres and a real storage emulator. A secret scan runs over the whole history rather than the tip, because a secret committed and later removed is still there and still readable.
