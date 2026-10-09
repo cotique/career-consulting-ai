@@ -2,6 +2,7 @@ import { loadTemplateText } from './load-text';
 import { chat } from './chat';
 import { onboardingParse } from './onboarding-parse';
 import { resumeExtract } from './resume-extract';
+import { resumeTailor } from './resume-tailor';
 import { vacancyParse } from './vacancy-parse';
 import { vacancyScore } from './vacancy-score';
 import type { PromptTemplate } from './template.types';
@@ -22,6 +23,7 @@ import type { PromptTemplate } from './template.types';
 export const TEMPLATES = {
   onboarding_parse: onboardingParse,
   resume_extract: resumeExtract,
+  resume_tailor: resumeTailor,
   vacancy_parse: vacancyParse,
   vacancy_score: vacancyScore,
   chat,
@@ -52,6 +54,7 @@ export function assertTemplateTextAvailable(): void {
 export type { PromptTemplate, TemplateParams } from './template.types';
 export { ONBOARDING_FREE_TEXT } from './onboarding-parse';
 export { RESUME_TEXT } from './resume-extract';
+export { RESUME_TAILOR_RESUME, RESUME_TAILOR_VACANCY } from './resume-tailor';
 export { VACANCY_TEXT } from './vacancy-parse';
 export { VACANCY_SCORE_PROFILE, VACANCY_SCORE_RESUME, VACANCY_SCORE_VACANCY } from './vacancy-score';
 export { CHAT_RETRIEVED_CONTEXT, CHAT_HISTORY, CHAT_MESSAGE } from './chat';

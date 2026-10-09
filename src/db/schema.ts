@@ -230,6 +230,11 @@ export const tailoredDocuments = pgTable('tailored_documents', {
     .references(() => resumes.id, { onDelete: 'cascade' }),
   docType: documentTypeEnum('doc_type').notNull(),
   content: text('content').notNull(),
+  // The tailored resume as structure, and what differs from the source resume
+  // (reordered bullets, keyword edits as before/after). Nullable: the table
+  // predates tailoring, so rows written before it carry only `content`.
+  structure: jsonb('structure'),
+  changes: jsonb('changes'),
   version: integer('version').default(1).notNull(),
   createdBy: createdByEnum('created_by').default('agent').notNull(),
   state: contentStateEnum('state').default('draft').notNull(),
